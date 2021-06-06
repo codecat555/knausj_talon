@@ -18,6 +18,9 @@ settings():
     # Stop continuous scroll/gaze scroll with a pop
     user.mouse_enable_pop_stops_scroll = 1
 
+    # Suspend continuous scroll when suspend_scroll tag is active
+    user.mouse_enable_suspended_scroll = 0
+
     # Enable pop click with 'control mouse' mode
     user.mouse_enable_pop_click = 1
 
