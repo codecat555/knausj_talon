@@ -12,6 +12,7 @@ from talon import (
     imgui,
     noise,
     ui,
+    registry,
 )
 from talon_plugins import eye_mouse, eye_zoom_mouse
 from talon_plugins.eye_mouse import config, toggle_camera_overlay, toggle_control
@@ -24,6 +25,8 @@ scroll_job = None
 gaze_job = None
 cancel_scroll_on_pop = True
 control_mouse_forced = False
+scroll_suspended = False
+scroll_suspend_tag = "user.suspend_scroll"
 
 default_cursor = {
     "AppStarting": r"%SystemRoot%\Cursors\aero_working.ani",
@@ -51,6 +54,7 @@ hidden_cursor = os.path.join(
 )
 
 mod = Module()
+mod.tag("suspend_scroll", desc="Suspend continuous scrolling when this tag becomes active and resume when it is inactivated.")
 mod.list(
     "mouse_button", desc="List of mouse button words to mouse_click index parameter"
 )
@@ -89,6 +93,12 @@ setting_mouse_wheel_down_amount = mod.setting(
     type=int,
     default=120,
     desc="The amount to scroll up/down (equivalent to mouse wheel on Windows by default)",
+)
+setting_mouse_enable_suspended_scroll = mod.setting(
+    "mouse_enable_suspended_scroll",
+    type=int,
+    default=0,
+    desc="Suspend scroll when suspend_scroll tag is active",
 )
 
 continuous_scoll_mode = ""
@@ -280,8 +290,35 @@ def on_pop(active):
         if setting_mouse_enable_pop_click.get() >= 1:
             ctrl.mouse_click(button=0, hold=16000)
 
+def win_event_handler(window):
+    global scroll_suspended, gaze_job, scroll_suspend_tag
+
+    # on windows, we get events from the clock
+    # and such, so this check is important
+    if not window.app.exe or window != ui.active_window():
+        return
+        
+    if setting_mouse_enable_suspended_scroll.get() >= 1:
+        if scroll_suspend_tag in registry.tags:
+            if not scroll_suspended:
+                if gaze_job or scroll_job:
+                    actions.user.mouse_scroll_stop()
+                scroll_suspended = True
+        else:
+            if scroll_suspended:
+                scroll_suspended = False
+                if continuous_scoll_mode = "gaze scroll"
+                    actions.user.mouse_gaze_scroll()
+                elif continuous_scoll_mode = "scroll down continuous":
+                    actions.user.mouse_scroll_down_continuous()
+                elif continuous_scoll_mode = "scroll up continuous":
+                    actions.user.mouse_scroll_up_continuous()
+                else:
+                    # best to just do nothing here?
+                    pass
 
 noise.register("pop", on_pop)
+ui.register("win_focus", win_event_handler)
 
 
 def mouse_scroll(amount):
@@ -306,8 +343,9 @@ def scroll_continuous_helper():
 
 
 def start_scroll():
-    global scroll_job
+    global scroll_job, scroll_suspended
     scroll_job = cron.interval("60ms", scroll_continuous_helper)
+    scroll_suspended = False
     # if eye_zoom_mouse.zoom_mouse.enabled and eye_mouse.mouse.attached_tracker is not None:
     #    eye_zoom_mouse.zoom_mouse.sleep(True)
 
@@ -344,7 +382,7 @@ def gaze_scroll():
 
 
 def stop_scroll():
-    global scroll_amount, scroll_job, gaze_job
+    global scroll_amount, scroll_job, gaze_job, scroll_suspended
     scroll_amount = 0
     if scroll_job:
         cron.cancel(scroll_job)
@@ -359,6 +397,7 @@ def stop_scroll():
 
     scroll_job = None
     gaze_job = None
+    scroll_suspended = False
     gui_wheel.hide()
 
     # if eye_zoom_mouse.zoom_mouse.enabled and eye_mouse.mouse.attached_tracker is not None:
