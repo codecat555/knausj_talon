@@ -27,6 +27,7 @@ cancel_scroll_on_pop = True
 control_mouse_forced = False
 gaze_suspended = False
 gaze_suspend_tags = [ "user.suspend_gaz", "user.generic_terminal" ]
+reading_mode = False
 
 default_cursor = {
     "AppStarting": r"%SystemRoot%\Cursors\aero_working.ani",
@@ -245,7 +246,18 @@ class Actions:
         rect = ui.active_window().rect
         ctrl.mouse_move(rect.left + (rect.width / 2), rect.top + (rect.height / 2))
 
-
+    def mouse_toggle_reading_mode():
+        '''reading mode is gaze scroll with no cursor'''
+        global reading_mode
+        if reading_mode:
+            actions.user.mouse_scroll_stop()
+            actions.user.mouse_show_cursor()
+            reading_mode = False
+        else:
+            actions.user.mouse_gaze_scroll()
+            actions.user.mouse_hide_cursor()
+            reading_mode = True
+        
 def show_cursor_helper(show):
     """Show/hide the cursor"""
     if app.platform == "windows":
