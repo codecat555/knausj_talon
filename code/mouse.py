@@ -3,20 +3,18 @@ import pathlib
 import subprocess
 
 from talon import (
-    Context,
     Module,
     actions,
     app,
+    clip,
     cron,
     ctrl,
-    clip,
     imgui,
     noise,
-    settings,
     ui,
     registry,
 )
-from talon_plugins import eye_mouse, eye_zoom_mouse, speech
+from talon_plugins import eye_mouse, eye_zoom_mouse
 from talon_plugins.eye_mouse import config, toggle_camera_overlay, toggle_control
 
 key = actions.key
