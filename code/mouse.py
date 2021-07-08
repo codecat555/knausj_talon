@@ -26,7 +26,7 @@ gaze_job = None
 cancel_scroll_on_pop = True
 control_mouse_forced = False
 gaze_suspended = False
-gaze_suspend_tags = [ "user.suspend_gaz", "user.generic_terminal" ]
+gaze_suspend_tags = [ "user.suspend_gaze", "user.generic_terminal" ]
 reading_mode = False
 
 default_cursor = {
