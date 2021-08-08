@@ -1,5 +1,5 @@
 import time
-from talon import Context, Module, actions, clip, ui
+from talon import Context, Module, actions, clip, ui, ctrl
 
 ctx = Context()
 mod = Module()
@@ -36,3 +36,21 @@ class Actions:
         """Moves right by n words."""
         for _ in range(n):
             actions.edit.word_right()
+
+    def go_top():
+        """Goes to top of page even wihle scrolling"""
+        print(f"GO TOP - START - mouse pos: {ctrl.mouse_pos()}")
+        actions.user.mouse_scroll_pause()
+        print(f"GO TOP - PAUSED - mouse pos: {ctrl.mouse_pos()}")
+        actions.edit.file_start()
+        print(f"GO TOP - NEW - mouse pos: {ctrl.mouse_pos()}")
+        actions.user.mouse_scroll_resume()
+        print(f"GO TOP - RESUMED - mouse pos: {ctrl.mouse_pos()}")
+
+    def go_bottom():
+        """Goes to bottom of page even wihle scrolling"""
+        actions.user.mouse_scroll_pause()
+        actions.edit.file_end()
+        actions.user.mouse_scroll_resume()
+
+

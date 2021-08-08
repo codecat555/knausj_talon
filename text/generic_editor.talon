@@ -42,10 +42,12 @@ go way up:
     edit.file_start()
     
 go bottom:
-    edit.file_end()
+    #edit.file_end()
+    user.go_bottom()
     
 go top:
-    edit.file_start()
+    #edit.file_start()
+    user.go_top()
 
 go page down:
     edit.page_down()

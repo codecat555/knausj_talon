@@ -28,6 +28,7 @@ control_mouse_forced = False
 gaze_suspended = False
 gaze_suspend_tags = [ "user.suspend_gaze", "user.generic_terminal" ]
 reading_mode = False
+scroll_paused = False
 
 default_cursor = {
     "AppStarting": r"%SystemRoot%\Cursors\aero_working.ani",
@@ -257,7 +258,32 @@ class Actions:
             actions.user.mouse_gaze_scroll()
             actions.user.mouse_hide_cursor()
             reading_mode = True
-        
+
+    def mouse_scroll_pause():
+        """pause scrolling"""
+        global scroll_paused, scroll_job, gaze_job
+        if not scroll_paused:
+            if scroll_job:
+                cron.cancel(scroll_job)
+
+            if gaze_job:
+                cron.cancel(gaze_job)
+            scroll_paused = True
+            print("SCROLL PAUSED")
+
+    def mouse_scroll_resume():
+        """resume scrolling"""
+        global scroll_paused, continuous_scoll_mode, scroll_job, gaze_job
+        if scroll_paused:
+            if continuous_scoll_mode == "scroll down continuous" or continuous_scoll_mode == "scroll up continuous" :
+                scroll_job = cron.interval("60ms", scroll_continuous_helper)
+            elif continuous_scoll_mode == "gaze scroll":
+                gaze_job = cron.interval("60ms", gaze_scroll)
+            else:
+                logging.warning(f'unknown scroll mode found during scroll resume: {continuous_scoll_mode}')
+            scroll_paused = False
+            print("SCROLL RESUMED")
+
 def show_cursor_helper(show):
     """Show/hide the cursor"""
     if app.platform == "windows":
@@ -337,26 +363,30 @@ def mouse_scroll(amount):
 
 
 def scroll_continuous_helper():
-    global scroll_amount
+    global scroll_paused, scroll_amount
     # print("scroll_continuous_helper")
     if scroll_amount and (
         eye_zoom_mouse.zoom_mouse.state == eye_zoom_mouse.STATE_IDLE
+        and not scroll_paused
     ):  # or eye_zoom_mouse.zoom_mouse.state == eye_zoom_mouse.STATE_SLEEP):
         actions.mouse_scroll(by_lines=False, y=int(scroll_amount / 10))
 
 
 def start_scroll():
-    global scroll_job, gaze_suspended
-    scroll_job = cron.interval("60ms", scroll_continuous_helper)
+    global scroll_paused, scroll_job, gaze_suspended
     gaze_suspended = False
+    scroll_paused = False
+    scroll_job = cron.interval("60ms", scroll_continuous_helper)
     # if eye_zoom_mouse.zoom_mouse.enabled and eye_mouse.mouse.attached_tracker is not None:
     #    eye_zoom_mouse.zoom_mouse.sleep(True)
 
 
 def gaze_scroll():
     # print("gaze_scroll")
+    global scroll_paused
     if (
         eye_zoom_mouse.zoom_mouse.state == eye_zoom_mouse.STATE_IDLE
+        and not scroll_paused
     ):  # or eye_zoom_mouse.zoom_mouse.state == eye_zoom_mouse.STATE_SLEEP:
         x, y = ctrl.mouse_pos()
 
@@ -385,7 +415,7 @@ def gaze_scroll():
 
 
 def stop_scroll():
-    global scroll_amount, scroll_job, gaze_job, gaze_suspended
+    global scroll_paused, scroll_amount, scroll_job, gaze_job, gaze_suspended
     scroll_amount = 0
     if scroll_job:
         cron.cancel(scroll_job)
@@ -401,6 +431,7 @@ def stop_scroll():
     scroll_job = None
     gaze_job = None
     gaze_suspended = False
+    scroll_paused = False
     gui_wheel.hide()
 
     # if eye_zoom_mouse.zoom_mouse.enabled and eye_mouse.mouse.attached_tracker is not None:
