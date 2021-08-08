@@ -1,6 +1,7 @@
 from talon import Context, Module, actions, imgui, settings, ui, app
 import os
 import subprocess
+import logging
 
 mod = Module()
 mod.apps.ubuntu = """
@@ -62,10 +63,13 @@ def get_win_path(wsl_path):
     path = ""
     try:
         path = (
-            subprocess.check_output(["wsl", "wslpath", "-w", wsl_path])
+            subprocess.check_output(["wsl", "wslpath", "-w", wsl_path], stderr=subprocess.STDOUT)
             .strip(b"\n")
             .decode()
         )
+    except subprocess.CalledProcessError as exc:
+        logging.warning(f"get_win_path(): failed to convert current path: {exc.output}")
+        path = ""
     except:
         path = ""
 
@@ -107,11 +111,11 @@ class UserActions:
     def file_manager_current_path():
         path = ui.active_window().title
         try:
-            path = path.split(":")[1].lstrip()
+            # select line tail following the last colon in the window title
+            path = path.split(":")[-1].lstrip()
         except:
             path = ""
 
-        # print("current: " + path)
         if "~" in path:
             # the only way I could find to correctly support the user folder:
             # get absolute path of ~, and strip /mnt/x from the string
