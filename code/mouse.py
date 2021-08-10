@@ -268,6 +268,7 @@ class Actions:
 
             if gaze_job:
                 cron.cancel(gaze_job)
+
             scroll_paused = True
             print("SCROLL PAUSED")
 
@@ -277,12 +278,13 @@ class Actions:
         if scroll_paused:
             if continuous_scoll_mode == "scroll down continuous" or continuous_scoll_mode == "scroll up continuous" :
                 scroll_job = cron.interval("60ms", scroll_continuous_helper)
+                print("WHEEL SCROLL RESUMED")
             elif continuous_scoll_mode == "gaze scroll":
                 gaze_job = cron.interval("60ms", gaze_scroll)
+                print("GAZE SCROLL RESUMED")
             else:
                 logging.warning(f'unknown scroll mode found during scroll resume: {continuous_scoll_mode}')
             scroll_paused = False
-            print("SCROLL RESUMED")
 
 def show_cursor_helper(show):
     """Show/hide the cursor"""
@@ -369,6 +371,7 @@ def scroll_continuous_helper():
         eye_zoom_mouse.zoom_mouse.state == eye_zoom_mouse.STATE_IDLE
         and not scroll_paused
     ):  # or eye_zoom_mouse.zoom_mouse.state == eye_zoom_mouse.STATE_SLEEP):
+        #print("WHEEL SCROLL MORE")
         actions.mouse_scroll(by_lines=False, y=int(scroll_amount / 10))
 
 
@@ -409,6 +412,7 @@ def gaze_scroll():
 
         midpoint = rect.y + rect.height / 2
         amount = int(((y - midpoint) / (rect.height / 10)) ** 3)
+        #print("GAZE SCROLL MORE")
         actions.mouse_scroll(by_lines=False, y=amount)
 
     # print(f"gaze_scroll: {midpoint} {rect.height} {amount}")
