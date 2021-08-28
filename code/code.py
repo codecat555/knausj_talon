@@ -81,6 +81,7 @@ def code_libraries(m) -> str:
 
 def get_file_ext():
     """Returns file name extension. If default method fails, try to extract the extension from the window title."""
+    """To override the fallback behavior, override the win.file_ext() action in the target context."""
     file_extension = actions.win.file_ext()
 
     if not file_extension:
