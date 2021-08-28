@@ -25,8 +25,8 @@ scroll_job = None
 gaze_job = None
 cancel_scroll_on_pop = True
 control_mouse_forced = False
-gaze_suspended = False
-gaze_suspend_tags = [ "user.suspend_gaze", "user.generic_terminal" ]
+scroll_suspended = False
+scroll_suspend_tag = "user.suspend_scroll"
 reading_mode = False
 
 default_cursor = {
@@ -95,11 +95,11 @@ setting_mouse_wheel_down_amount = mod.setting(
     default=120,
     desc="The amount to scroll up/down (equivalent to mouse wheel on Windows by default)",
 )
-setting_mouse_terminal_suspends_scroll = mod.setting(
-    "mouse_terminal_suspends_scroll",
+setting_mouse_enable_suspended_scroll = mod.setting(
+    "mouse_enable_suspended_scroll",
     type=int,
     default=0,
-    desc="Suspend scroll when terminal window has focus",
+    desc="Suspend scroll when suspend_scroll tag is active",
 )
 
 continuous_scoll_mode = ""
@@ -303,7 +303,7 @@ def on_pop(active):
             ctrl.mouse_click(button=0, hold=16000)
 
 def win_event_handler(window):
-    global gaze_suspended, gaze_job, gaze_suspend_tags
+    global scroll_suspended, gaze_job, scroll_suspend_tag
 
     # on windows, we get events from the clock
     # and such, so this check is important
@@ -311,12 +311,11 @@ def win_event_handler(window):
         return
         
     if setting_mouse_terminal_suspends_scroll.get() >= 1:
-        #if (gaze_job or scroll_job) and "user.generic_terminal" in registry.tags:
-        if (gaze_job or scroll_job) and any(t in registry.tags for t in gaze_suspend_tags):
+        if (gaze_job or scroll_job) and scroll_suspend_tag in registry.tags:
             actions.user.mouse_scroll_stop()
-            gaze_suspended = True
-        elif gaze_suspended:
-            gaze_suspended = False
+            scroll_suspended = True
+        elif scroll_suspended:
+            scroll_suspended = False
             actions.user.mouse_gaze_scroll()
 
 noise.register("pop", on_pop)
@@ -345,9 +344,9 @@ def scroll_continuous_helper():
 
 
 def start_scroll():
-    global scroll_job, gaze_suspended
+    global scroll_job, scroll_suspended
     scroll_job = cron.interval("60ms", scroll_continuous_helper)
-    gaze_suspended = False
+    scroll_suspended = False
     # if eye_zoom_mouse.zoom_mouse.enabled and eye_mouse.mouse.attached_tracker is not None:
     #    eye_zoom_mouse.zoom_mouse.sleep(True)
 
@@ -384,7 +383,7 @@ def gaze_scroll():
 
 
 def stop_scroll():
-    global scroll_amount, scroll_job, gaze_job, gaze_suspended
+    global scroll_amount, scroll_job, gaze_job, scroll_suspended
     scroll_amount = 0
     if scroll_job:
         cron.cancel(scroll_job)
@@ -399,7 +398,7 @@ def stop_scroll():
 
     scroll_job = None
     gaze_job = None
-    gaze_suspended = False
+    scroll_suspended = False
     gui_wheel.hide()
 
     # if eye_zoom_mouse.zoom_mouse.enabled and eye_mouse.mouse.attached_tracker is not None:
