@@ -310,7 +310,7 @@ def win_event_handler(window):
     if not window.app.exe or window != ui.active_window():
         return
         
-    if setting_mouse_terminal_suspends_scroll.get() >= 1:
+    if setting_mouse_enable_suspended_scroll.get() >= 1:
         if (gaze_job or scroll_job) and scroll_suspend_tag in registry.tags:
             actions.user.mouse_scroll_stop()
             scroll_suspended = True
