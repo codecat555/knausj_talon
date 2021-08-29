@@ -103,12 +103,12 @@ setting_mouse_enable_suspended_scroll = mod.setting(
     desc="Suspend scroll when suspend_scroll tag is active",
 )
 
-continuous_scoll_mode = ""
+continuous_scroll_mode = ""
 
 
 @imgui.open(x=700, y=0)
 def gui_wheel(gui: imgui.GUI):
-    gui.text("Scroll mode: {}".format(continuous_scoll_mode))
+    gui.text("Scroll mode: {}".format(continuous_scroll_mode))
     gui.line()
     if gui.button("Wheel Stop [stop scrolling]"):
         actions.user.mouse_scroll_stop()
@@ -192,8 +192,8 @@ class Actions:
 
     def mouse_scroll_down_continuous():
         """Scrolls down continuously"""
-        global continuous_scoll_mode
-        continuous_scoll_mode = "scroll down continuous"
+        global continuous_scroll_mode
+        continuous_scroll_mode = "scroll down continuous"
         mouse_scroll(setting_mouse_continuous_scroll_amount.get())()
 
         if scroll_job is None:
@@ -208,8 +208,8 @@ class Actions:
 
     def mouse_scroll_up_continuous():
         """Scrolls up continuously"""
-        global continuous_scoll_mode
-        continuous_scoll_mode = "scroll up continuous"
+        global continuous_scroll_mode
+        continuous_scroll_mode = "scroll up continuous"
         mouse_scroll(-setting_mouse_continuous_scroll_amount.get())()
 
         if scroll_job is None:
@@ -223,8 +223,8 @@ class Actions:
 
     def mouse_gaze_scroll():
         """Starts gaze scroll"""
-        global continuous_scoll_mode
-        continuous_scoll_mode = "gaze scroll"
+        global continuous_scroll_mode
+        continuous_scroll_mode = "gaze scroll"
 
         start_cursor_scrolling()
         if setting_mouse_hide_mouse_gui.get() == 0:
@@ -312,14 +312,6 @@ def win_event_handler(window):
         return
         
     if setting_mouse_enable_suspended_scroll.get() >= 1:
-<<<<<<< HEAD
-        if (gaze_job or scroll_job) and scroll_suspend_tag in registry.tags:
-            actions.user.mouse_scroll_stop()
-            scroll_suspended = True
-        elif scroll_suspended:
-            scroll_suspended = False
-            actions.user.mouse_gaze_scroll()
-=======
         if scroll_suspend_tag in registry.tags:
             if not scroll_suspended:
                 if gaze_job or scroll_job:
@@ -328,16 +320,15 @@ def win_event_handler(window):
         else:
             if scroll_suspended:
                 scroll_suspended = False
-                if continuous_scoll_mode = "gaze scroll"
+                if continuous_scroll_mode == "gaze scroll":
                     actions.user.mouse_gaze_scroll()
-                elif continuous_scoll_mode = "scroll down continuous":
+                elif continuous_scroll_mode == "scroll down continuous":
                     actions.user.mouse_scroll_down_continuous()
-                elif continuous_scoll_mode = "scroll up continuous":
+                elif continuous_scroll_mode == "scroll up continuous":
                     actions.user.mouse_scroll_up_continuous()
                 else:
                     # best to just do nothing here?
                     pass
->>>>>>> scroll-suspend
 
 noise.register("pop", on_pop)
 ui.register("win_focus", win_event_handler)
