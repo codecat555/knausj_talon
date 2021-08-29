@@ -55,6 +55,7 @@ hidden_cursor = os.path.join(
 )
 
 mod = Module()
+mod.tag("suspend_scroll", desc="Suspend continuous scrolling when this tag becomes active and resume when it is inactivated.")
 mod.list(
     "mouse_button", desc="List of mouse button words to mouse_click index parameter"
 )
