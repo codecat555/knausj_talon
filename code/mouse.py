@@ -91,12 +91,12 @@ setting_mouse_wheel_down_amount = mod.setting(
     desc="The amount to scroll up/down (equivalent to mouse wheel on Windows by default)",
 )
 
-continuous_scoll_mode = ""
+continuous_scroll_mode = ""
 
 
 @imgui.open(x=700, y=0)
 def gui_wheel(gui: imgui.GUI):
-    gui.text("Scroll mode: {}".format(continuous_scoll_mode))
+    gui.text("Scroll mode: {}".format(continuous_scroll_mode))
     gui.line()
     if gui.button("Wheel Stop [stop scrolling]"):
         actions.user.mouse_scroll_stop()
@@ -180,8 +180,8 @@ class Actions:
 
     def mouse_scroll_down_continuous():
         """Scrolls down continuously"""
-        global continuous_scoll_mode
-        continuous_scoll_mode = "scroll down continuous"
+        global continuous_scroll_mode
+        continuous_scroll_mode = "scroll down continuous"
         mouse_scroll(setting_mouse_continuous_scroll_amount.get())()
 
         if scroll_job is None:
@@ -196,8 +196,8 @@ class Actions:
 
     def mouse_scroll_up_continuous():
         """Scrolls up continuously"""
-        global continuous_scoll_mode
-        continuous_scoll_mode = "scroll up continuous"
+        global continuous_scroll_mode
+        continuous_scroll_mode = "scroll up continuous"
         mouse_scroll(-setting_mouse_continuous_scroll_amount.get())()
 
         if scroll_job is None:
@@ -211,8 +211,8 @@ class Actions:
 
     def mouse_gaze_scroll():
         """Starts gaze scroll"""
-        global continuous_scoll_mode
-        continuous_scoll_mode = "gaze scroll"
+        global continuous_scroll_mode
+        continuous_scroll_mode = "gaze scroll"
 
         start_cursor_scrolling()
         if setting_mouse_hide_mouse_gui.get() == 0:
