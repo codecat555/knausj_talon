@@ -312,12 +312,32 @@ def win_event_handler(window):
         return
         
     if setting_mouse_enable_suspended_scroll.get() >= 1:
+<<<<<<< HEAD
         if (gaze_job or scroll_job) and scroll_suspend_tag in registry.tags:
             actions.user.mouse_scroll_stop()
             scroll_suspended = True
         elif scroll_suspended:
             scroll_suspended = False
             actions.user.mouse_gaze_scroll()
+=======
+        if scroll_suspend_tag in registry.tags:
+            if not scroll_suspended:
+                if gaze_job or scroll_job:
+                    actions.user.mouse_scroll_stop()
+                scroll_suspended = True
+        else:
+            if scroll_suspended:
+                scroll_suspended = False
+                if continuous_scoll_mode = "gaze scroll"
+                    actions.user.mouse_gaze_scroll()
+                elif continuous_scoll_mode = "scroll down continuous":
+                    actions.user.mouse_scroll_down_continuous()
+                elif continuous_scoll_mode = "scroll up continuous":
+                    actions.user.mouse_scroll_up_continuous()
+                else:
+                    # best to just do nothing here?
+                    pass
+>>>>>>> scroll-suspend
 
 noise.register("pop", on_pop)
 ui.register("win_focus", win_event_handler)
