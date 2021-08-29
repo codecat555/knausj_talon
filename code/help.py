@@ -278,6 +278,41 @@ def draw_search_commands(gui: imgui.GUI):
     commands_grouped = get_search_commands(search_phrase)
     commands_flat = list(itertools.chain.from_iterable(commands_grouped.values()))
 
+    # apparent race condition here...
+    #    2021-08-29 13:35:00    IO
+    #    ####|||||||||||hellp##s|s#err#||g#rre#b#b#lle###########||||||| 1064.99 (viterbi)
+    #
+    #    ####|||||||||||hellp##||s#earch|t#rre#m#b#lle###########||||||| 1041.38
+    #      result: "help search tremble"
+    #
+    #    2021-08-29 13:35:27    IO DECODED help search tremble
+    #    2021-08-29 13:35:27    IO [audio]=1410.000ms [compile]=0.028ms [emit]=108.781ms (0.08x) [decode]=8.838ms (0.01x) [total]=116.387ms (0.08x)
+    #    2021-08-29 13:35:27    IO
+    #    2021-08-29 13:35:30    IO hiss! True
+    #    2021-08-29 13:35:30    IO hiss! False
+    #    sum=490.039ms load=16.001ms build=8.001ms link=15.999ms flat=12.001ms min=434.001ms cfg=4.036ms
+    #    2021-08-29 13:35:31 WARNING Skipped unknown tokens: [',', '.', '2', '`']
+    #    2021-08-29 13:35:31    IO grammar -> dfa -> cfg in 0.503757s
+    #    ####|||||||||||||hellp##||searrchh|||#r#eb###ell###########||||||||| 1299.49 (viterbi)
+    #
+    #    ####|||||||||||||hellp##||searrchh|||#r#eb###ell###########||||||||| 1292.89
+    #      result: "help search rebel"
+    #
+    #    2021-08-29 13:35:31    IO DECODED help search rebel
+    #    2021-08-29 13:35:32 ERROR cron interval error <bound method GUI._tick of <talon.imgui.GUI object at 0x0000000022D59B80>>
+    #       12:                   threading.py:912* # cron thread
+    #       11:                   threading.py:954*
+    #       10:                   threading.py:892*
+    #        9:                  talon\cron.py:155|
+    #        8:                  talon\cron.py:103|
+    #        7:        talon\scripting\rctx.py:233| # 'cron' user.knausj_talon.code.help:call()
+    #        6:                  talon\cron.py:178| # [stack splice]
+    #        5:                 talon\imgui.py:894|
+    #        4:                 talon\imgui.py:920|
+    #        3: user\knausj_talon\code\help.py:229| draw_search_commands(gui)
+    #        2: user\knausj_talon\code\help.py:281| sorted_commands_grouped = sorted(
+    #        1: user\knausj_talon\code\help.py:283| key=lambda item: context_map[item[0]] not in cached_active_contexts_list,
+    #    KeyError: 'user.knausj_talon.misc.talon_helpers.talon'
     sorted_commands_grouped = sorted(
         commands_grouped.items(),
         key=lambda item: context_map[item[0]] not in cached_active_contexts_list,
