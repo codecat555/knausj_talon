@@ -60,47 +60,111 @@ if app.platform == "windows":
 
 
 def get_win_path(wsl_path):
-    path = ""
-    try:
-        path = (
-            subprocess.check_output(["wsl", "wslpath", "-w", wsl_path], stderr=subprocess.STDOUT)
-            .strip(b"\n")
-            .decode()
-        )
-    except subprocess.CalledProcessError as exc:
-        logging.warning(f"get_win_path(): failed to convert current path: {exc.output}")
-        path = ""
-    except:
-        path = ""
-
-    return path
-
+    # for testing
+    #wsl_path = 'Ubuntu-20.04'
+    #wsl_path = '/mnt/qube/woobee/woobee/woobit'
+    return _run_wslpath(["-w"], wsl_path)
 
 def get_usr_path():
+    return _run_wslpath(["-a"], "~")
+
+def get_wsl_path(win_path):
+    return _run_wslpath(["-u"], "'{}'".format(win_path))
+
+MAX_ATTEMPTS = 2
+def _run_wslpath(args, in_path):
+    command_line = [ "wsl", "wslpath" ] + args + [in_path]
+
     path = ""
-    try:
-        path = (
-            subprocess.check_output(["wsl", "wslpath", "-a", "~"]).strip(b"\n").decode()
-        )
-    except:
-        path = ""
+    loop_num = 0
+    # this command fails every once in a while, with no indication why. so,
+    # when that happens we just retry.
+    while loop_num < MAX_ATTEMPTS:
+        try:
+            path = (
+                subprocess.check_output(command_line, stderr=subprocess.STDOUT)
+                .strip(b"\n")
+                .decode()
+            )
+        except Exception as exc:
+            path = ""
+
+            # check known corner cases
+            distro = get_distro()
+            if in_path == distro:
+                # this is expected. happens when running after the window is created but before the title has been set.
+                # no need to spam the console for this case or retry.
+                #print(f"_run_wslpath(): attempt {loop_num} - ignoring expected failure.")
+                break
+            else:
+                # decode the error
+                #
+                # Note: seems WSL itself generates utf-16 errors, whereas your guest os probably does not.
+                # - see https://github.com/microsoft/WSL/issues/4607 and related issures.
+                #
+                # The WSL errors require special handling, adding work to every non-WSL decoding even though
+                # they are comparatively rare (one hopes). The extra cost, I think, is justified given the
+                # likely importance of any such messages. For example, which would you rather see in the log?
+                #
+                #   1. Nothing at all - this is what earlier code did (masked the errors)
+                #
+                #   2. b'T\x00h\x00e\x00 \x00W\x00i\x00n\x00d\x00o\x00w\x00s\x00 \x00S\x00u\x00b\x00s\x00y\x00s\x00t\x00e\x00m\x00 \x00f\x00o\x00r\x00 \x00L\x00i\x00n\x00u\x00x\x00 \x00i\x00n\x00s\x00t\x00a\x00n\x00c\x00e\x00 \x00h\x00a\x00s\x00 \x00t\x00e\x00r\x00m\x00i\x00n\x00a\x00t\x00e\x00d\x00.\x00\r\x00\r\x00\n\x00'
+                #
+                #   3. The Windows Subsystem for Linux instance has terminated.
+                #
+                # The error above indicates the WSL distro is hung and this path detection mechanism is offline. When
+                # that happens, it takes a while for the command to return and the talon watchdog generates messages
+                # in the log that seem ominous but don't explain what the problem really is. The prime thing to do here
+                # is to get word to the user that WSL is not responding normally. Note that, even after reaching this
+                # state, existing interactive wsl sessions continue to run and so the user may be unaware of the true
+                # source of their "talon problems".
+                #
+                # For the fallback mechanism - that code which runs if utf-16 decoding fails - it may be better to
+                # discover the guest os locale for use in decoding - dunno. For now, we preserve the legacy behavior
+                # of this code and use the default decoding.
+                try:
+                    # try windows/wsl encoding first
+                    error = exc.output.decode('UTF-16-LE').strip()
+                    # tag the error with the actual source
+                    error_source = 'WSL'
+                except UnicodeDecodeError as decode_exc:
+                    # fallback to default encoding
+                    error = exc.output.decode().strip()
+                    error_source = f'{distro}'
+
+                # error injection, for testing
+                if False:
+                    error = 'The Windows Subsystem for Linux instance has terminated.'
+                    error_source = 'WSL'
+
+                logging.warning(f'_run_wslpath(): failed to translate current path - attempt {loop_num}, source: {error_source}, error: {error}')
+
+                # log an additional warning line for this particular case
+                if error == 'The Windows Subsystem for Linux instance has terminated.':
+                    logging.warning(f'_run_wslpath(): attempt {loop_num} - seems you need to restart your wsl session, e.g. "wsl --terminate {distro}; wsl"')
+        else:
+            # no need to loop and try again
+            break
+
+        loop_num += 1
+
+    # for testing
+    #print(f"_run_wslpath(): in path: '{in_path}', translated path: '{path}'")
 
     return path
 
-
-def get_wsl_path(win_path):
-    path = ""
+def get_distro():
+    distro = None
     try:
-        path = (
-            subprocess.check_output(["wsl", "wslpath", "-u", "'{}'".format(win_path)])
+        distro = (
+            subprocess.check_output(["wsl", "echo", "$WSL_DISTRO_NAME"], stderr=subprocess.STDOUT)
             .strip(b"\n")
             .decode()
         )
-    except:
-        path = ""
+    except Exception as exc:
+        logging.warning(f"git_distro(): failed to retrieve distro name - {exc.output.decode()}")
 
-    return path
-
+    return distro
 
 @ctx.action_class('user')
 class UserActions:
@@ -116,7 +180,6 @@ class UserActions:
         except:
             path = ""
 
-        # print("current: " + path)
         if "~" in path:
             # the only way I could find to correctly support the user folder:
             # get absolute path of ~, and strip /mnt/x from the string
