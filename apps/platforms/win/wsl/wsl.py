@@ -4,25 +4,105 @@ import os
 import subprocess
 import logging
 import sys
+import re
 
 mod = Module()
-# Note: these context matches are specific to ubuntu, but there are other
-# distros one can run under wsl, e.g. docker. for that matter, there are
-# multiple ubuntu distros available. we need a more general way of detecting
-# the current distro, and a way for the user to specify which distro to use
-# for any particular operation. perhaps implement a generic_wsl module and
-# then layer various distros on top of that?
-mod.apps.ubuntu = """
-os: windows
-and app.name: ubuntu.exe
-"""
 
 ctx = Context()
-ctx.matches = r"""
-app: ubuntu
+
+wsl_distros = []
+
+key_event = None
+registry_key_handle = None
+
+#distros_alternation = '|'.join(['ubuntu', 'debian'])
+distros_alternation = 'Ubuntu'
+
+def _close_key():
+    print(f"_close_key(): {registry_key_handle}")
+    if registry_key_handle:
+        win32api.RegCloseKey(registry_key_handle)
+#
+def atexit():
+    _close_key()
+
+if app.platform == "windows":
+    import win32api
+    import win32event
+    import win32con
+    import atexit
+
+def _initialize_key():
+    global key_event, registry_key_handle
+
+    try:
+        if registry_key_handle:
+            _close_key()
+    
+        #key_event = win32event.CreateEvent(win32event.SYNCHRONIZE, True, True, None)
+        key_event = win32event.CreateEvent(None, True, True, None)
+        #print(f"KEY_EVENT: {key_event}")
+
+        registry_key_handle = win32api.RegOpenKeyEx(
+            win32con.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Lxss", 0, win32con.KEY_READ | win32con.KEY_WOW64_64KEY)
+        #print(f"registry_key_handle: {registry_key_handle}")
+
+        #print(f"VERSION: {win32api.GetVersionEx()}")
+        win32api.RegNotifyChangeKeyValue(
+                registry_key_handle,
+                True,
+                win32api.REG_NOTIFY_CHANGE_LAST_SET,
+                key_event,
+                True
+            )
+
+        # trigger reading the list for the first time
+        win32event.SetEvent(key_event)
+
+#####
+        result = win32event.WaitForSingleObjectEx(key_event, 0, False)
+        #print(f'WAIT - {result=} (looking for {win32con.WAIT_OBJECT_0})')
+        #print(f'WAIT - {win32con.WAIT_OBJECT_0=})')
+        #print(f'WAIT - {win32con.WAIT_ABANDONED=})')
+        #print(f'WAIT - {win32con.WAIT_TIMEOUT=})')
+#####
+    except WindowsError:
+        # WIP - handle this
+        raise
+
+if False:
+    mod.apps.ubuntu = """
+    os: windows
+    and app.name: ubuntu.exe
+    """
+elif False:
+    # Note: these context matches are specific to ubuntu, but there are other
+    # distros one can run under wsl, e.g. docker. for that matter, there are
+    # multiple ubuntu distros available. we need a more general way of detecting
+    # the current distro, and a way for the user to specify which distro to use
+    # for any particular operation. perhaps implement a generic_wsl module and
+    # then layer various distros on top of that?
+    mod.apps.ubuntu = """
+    os: windows
+    and app.name: ubuntu.exe
+    """
+
+def context_matcher():
+    update_wsl_distros()
+    #distros_alternation = '|'.join(get_distros())
+    distros_alternation = '|'.join(wsl_distros)
+    return fr"""
+    app: ubuntu
+    app: windows_terminal
+    and win.title: /@({distros_alternation}):/ 
+    """
+
+ctx.matches = fr"""
 app: windows_terminal
-and win.title: /Ubuntu/ 
+and tag: user.wsl
+tag: user.wsl
 """
+
 directories_to_remap = {}
 directories_to_exclude = {}
 
@@ -66,32 +146,41 @@ if app.platform == "windows":
             "Videos": os.path.join(user_path, "Videos"),
         }
 
-def get_win_path(wsl_path):
+def get_win_path(wsl_path, distro=None):
     # for testing
     #wsl_path = 'Ubuntu-20.04'
     #wsl_path = '/mnt/qube/woobee/woobee/woobit'
-    #print(f"WINPATH: {wsl_path}")
-    return run_wslpath(["-w"], wsl_path)
+    print(f"WINPATH: {wsl_path}")
+    return run_wslpath(["-w"], wsl_path, distro)
 
-def get_usr_path():
-    #print(f'USRPATH: {"~"}')
-    return run_wslpath(["-a"], "~")
+def get_usr_path(distro=None):
+    print(f'USRPATH: {"~"}')
+    return run_wslpath(["-a"], "~", distro)
 
-def get_wsl_path(win_path):
-    #print(f"WSLPATH: {win_path}")
-    return run_wslpath(["-u"], "'{}'".format(win_path))
+def get_wsl_path(win_path, distro=None):
+    print(f"WSLPATH: {win_path}")
+    return run_wslpath(["-u"], "'{}'".format(win_path), distro)
 
 # this command fails every once in a while, with no indication why.
 # so, when that happens we just retry.
 MAX_ATTEMPTS = 2
-def run_wslpath(args, in_path):
+def run_wslpath(args, in_path, in_distro=None):
     path = ""
     loop_num = 0
 
     while loop_num < MAX_ATTEMPTS:
-        (path, error) = run_wsl(['wslpath', *args, in_path])
+        (distro, path, error) = run_wsl(['wslpath', *args, in_path], in_distro)
         if error:
-            logging.error(f'run_wslpath(): failed to translate given path - attempt: {loop_num}, error: {error}')
+            if in_path == distro and error.endswith('No such file or directory'):
+                # for testing
+                #print(f"run_wslpath(): - ignoring expected failure.")
+
+                # this is expected. happens when running after the window is created
+                # but before the default title has been changed. no need to spam the
+                # console for this case, just let it pass.
+                pass
+            else:
+                logging.error(f'run_wslpath(): failed to translate given path - attempt: {loop_num}, error: {error}')
 
             path = ""
         elif path:
@@ -163,18 +252,108 @@ def _run_cmd(command_line):
     #print(f'_run_cmd(): RETURNING - result: {result}, error: {error}')
     return [result, error]
 
-def run_wsl(args):
+def run_wsl(args, distro=None):
     # for testing
     if False:
         wsl_cmd_str = "nosuchcommand"
     else:
         wsl_cmd_str = "wsl"
 
+    # for testing
+    #distro = "Debian"
+    #distro = 'Ubuntu-20.04-ms-0'
+
+    if not distro:
+        # fetch the (default) distro first
+        result = _run_cmd([wsl_cmd_str, "echo", "$WSL_DISTRO_NAME"])
+        distro = result[0]
+        if not distro:
+            # if we can't fetch the distro, then the user's command is not likely to work
+            # either. so, we just return any error information we have to the caller.
+            #print(f'run_wsl(): RETURNING EARLY (no distro) - distro: {distro}, result: {result}')
+            return [ None ] + result
+
     # now run the caller's command
-    command_line = [ wsl_cmd_str ] + args
+    command_line = [ wsl_cmd_str, "--distribution", distro ] + args
     result = _run_cmd(command_line)
-    #print(f'run_wsl(): RETURNING - result: {result}')
-    return result
+    #print(f'run_wsl(): RETURNING - distro: {distro}, result: {result}')
+    return [ distro ] + result
+
+def get_distro():
+    #return run_wsl(["echo"])[0]
+    return run_wsl(["\n"])[0]
+
+def get_distros():
+    distros = []
+
+    (result, error) = _run_cmd(["wsl", "-l"])
+    if error:
+        logging.error(f'get_distros(): - command failed: {error}')
+    else:
+        #print(f'get_distros(): - result: {result}')
+        # skip the first line
+        lines = result.split('\n')[1:]
+        for line in lines:
+            name = line.split(' ')[0].rstrip()
+            if line.endswith(' (Default)'):
+                # the default distro is always first in the list
+                distros.insert(0, name)
+            else:
+                distros.append(name)
+
+    return distros
+
+wsl_title_regex = re.compile(r'^.*@([^:]+):\s*(.*)$')
+
+def update_wsl_distros():
+    global ctx, registry_key_handle, wsl_distros
+
+    if not registry_key_handle:
+        _initialize_key()
+
+    try:
+        result = win32event.WaitForSingleObjectEx(key_event, 0, False)
+#        print(f'WAIT - {result=}')
+#        print(f'WAIT - {win32con.WAIT_OBJECT_0=})')
+#        print(f'WAIT - {win32con.WAIT_ABANDONED=})')
+#        print(f'WAIT - {win32con.WAIT_TIMEOUT=})')
+        if result == win32con.WAIT_OBJECT_0:
+            # registry has changed since we last read it, load the distros
+            subkeys = win32api.RegEnumKeyEx(registry_key_handle)
+            for index,subkey in enumerate(subkeys):
+                #print(f'{index=}, {subkey=}')
+
+                distro_handle = win32api.RegOpenKeyEx(
+                    registry_key_handle, subkey[0], 0, win32con.KEY_READ | win32con.KEY_WOW64_64KEY)
+                #print(f"{distro_handle=}")
+                distro_name = win32api.RegQueryValueEx(distro_handle, 'DistributionName')[0]
+                wsl_distros.append(distro_name)
+                win32api.RegCloseKey(distro_handle)
+                
+                #print(f'{subkey=}, {distro_name=}')
+
+            # reset the event, will be set by system if reg key changes
+            win32event.ResetEvent(key_event)
+
+            # update context match
+            distros_alternation = '|'.join(wsl_distros)
+#            ctx.matches = fr"""
+#            app: ubuntu
+#            app: windows_terminal
+#            and win.title: /@({distros_alternation}):/ 
+#            """
+#            ctx.matches = (fr"""
+#            app: ubuntu
+#            app: windows_terminal
+#            and win.title: /@({distros_alternation}):/ 
+#            """)
+        elif result != win32con.WAIT_TIMEOUT:
+            raise Exception('howdy duty')
+    except WindowsError:
+        # WIP - handle this
+        raise
+
+    print(f'{wsl_distros=}')
 
 @ctx.action_class('user')
 class UserActions:
@@ -182,24 +361,39 @@ class UserActions:
     def file_manager_open_parent():
         actions.insert('cd ..')
         actions.key('enter')
+# WIP - need to review file_manager_current_path() in apps/win/windows_terminal/windows_terminal.py,
+# because it is called if context matching fails in this module and then the results are not right -
+# the full window title was being returned by that module rather than just the path or nothing. that
+# file assumes powershell (I think), which is not right imo - and how does this all fit in with the
+# generic_terminal stuff?
     def file_manager_current_path():
         path = ui.active_window().title
-        try:
-            # select line tail following the last colon in the window title
-            path = path.split(":")[-1].lstrip()
-        except:
-            path = ""
 
-        #print(f'TITLE PARSE - path is {path}')
+        update_wsl_distros()
+
+        distro = None
+        try:
+            (distro, path) = re.match(wsl_title_regex, path).groups()
+            if distro not in wsl_distros:
+                #logger.warning(f'Unknown wsl distro: {distro}')
+                raise Exception(f'Unknown wsl distro: {distro}')
+        except:
+            try:
+                # select line tail following the last colon in the window title
+                path = path.split(":")[-1].lstrip()
+            except:
+                path = ""
+
+        print(f'TITLE PARSE - distro is {distro}, path is {path}')
 
         if "~" in path:
             # the only way I could find to correctly support the user folder:
             # get absolute path of ~, and strip /mnt/x from the string
-            abs_usr_path = get_usr_path()
+            abs_usr_path = get_usr_path(distro)
             abs_usr_path = abs_usr_path[abs_usr_path.find("/home") : len(abs_usr_path)]
             path = path.replace("~", abs_usr_path)
 
-        path = get_win_path(path)
+        path = get_win_path(path, distro)
 
         if path in directories_to_remap:
             path = directories_to_remap[path]
