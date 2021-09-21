@@ -16,7 +16,7 @@ dexter:
 	# close the mouse grid if open
 	user.grid_close()
 
-mitty | midi | midclick: 
+midi: 
 	mouse_click(2)
 	# close the mouse grid
 	user.grid_close()
