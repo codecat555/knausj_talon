@@ -422,6 +422,8 @@ def refresh_context_command_map(enabled_only=False):
     # print(str(active_contexts))
     update_active_contexts_cache(active_contexts)
 
+    import time
+    cumulative_time = 0
     context_command_map = {}
     for context_name, context in registry.contexts.items():
         splits = context_name.split(".")
@@ -429,9 +431,11 @@ def refresh_context_command_map(enabled_only=False):
         if "talon" == splits[-1]:
             display_name = splits[-2].replace("_", " ")
 
+            start = time.time()
             short_names = actions.user.create_spoken_forms(
                 display_name, generate_subsequences=False,
             )
+            cumulative_time = cumulative_time + ((time.time() - start)*1000)
 
             if short_names[0] in overrides:
                 short_names = [overrides[short_names[0]]]
@@ -458,6 +462,8 @@ def refresh_context_command_map(enabled_only=False):
                     # the last entry will contain no symbols
                     display_name_to_context_name_map[display_name] = context_name
                     context_map[context_name] = context
+
+    print(f'refresh_context_command_map(): create_spoken_forms took {cumulative_time:.3f} ms.')
 
     refresh_rule_word_map(context_command_map)
 
