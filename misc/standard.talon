@@ -27,3 +27,18 @@ wipe: key(backspace)
 	key(left)
 slap: edit.line_insert_down()
 
+## from pokey - update additional_words.csv using vscode.
+#additional word:
+#    user.switcher_focus("Code")
+#    user.vscode("workbench.action.openRecent")
+#    sleep(50ms)
+#    insert("pokey-talon")
+#    key(enter)
+#    sleep(250ms)
+#    user.vscode("workbench.action.quickOpen")
+#    sleep(200ms)
+#    insert("additional_words")
+#    sleep(300ms)
+#    key(enter)
+#    edit.file_end()
+#    edit.line_insert_down()
