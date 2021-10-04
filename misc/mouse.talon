@@ -112,9 +112,9 @@ curse yes: user.mouse_show_cursor()
 curse no: user.mouse_hide_cursor()
 copy mouse position: user.copy_mouse_position()
 
-try again: user.mouse_try_again()
-top going up: user.mouse_top_going_up()
-top going down: user.mouse_top_going_down()
+#try again: user.mouse_try_again()
+#top going up: user.mouse_top_going_up()
+#top going down: user.mouse_top_going_down()
 
 scroll stall: user.mouse_stalled()
 scroll free: user.mouse_unstuck()
