@@ -11,7 +11,10 @@ mode: all
     user.homophones_hide()
     user.help_hide()
     user.mouse_sleep()
+    sound.set_microphone('None')
     speech.disable()
     user.engine_sleep()
 ^talon sleep [<phrase>]$: speech.disable()
-^(clap on|talon wake)$: speech.enable()
+^(clap on|talon wake)$:
+    sound.set_microphone('System Default')
+    speech.enable()
