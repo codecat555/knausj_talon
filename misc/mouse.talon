@@ -116,6 +116,8 @@ copy mouse position: user.copy_mouse_position()
 #top going up: user.mouse_top_going_up()
 #top going down: user.mouse_top_going_down()
 
-scroll stall: user.mouse_stalled()
-scroll free: user.mouse_unstuck()
+scroll stall: user.mouse_scroll_stalled()
+scroll free: user.mouse_scroll_free()
+
+scroll debug: user.mouse_scroll_debug()
 
