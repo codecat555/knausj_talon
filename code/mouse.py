@@ -116,6 +116,18 @@ def gui_wheel(gui: imgui.GUI):
 
 @mod.action_class
 class Actions:
+    def mouse_scroll_stalled():
+        """mouse scroll stalled"""
+        print(f'mouse scroll is stalled')
+
+    def mouse_scroll_free():
+        """mouse scroll free"""
+        print(f'mouse scroll is free')
+
+    def mouse_scroll_debug():
+        """shows scroll debug info"""
+        print(f'{gaze_job=}, {scroll_job=}')
+
     def mouse_show_cursor():
         """Shows the cursor"""
         show_cursor_helper(True)
@@ -341,6 +353,7 @@ def mouse_scroll(amount):
             scroll_amount += amount
         else:
             scroll_amount = amount
+        #print('HERE 0')
         actions.mouse_scroll(y=int(amount))
 
     return scroll
@@ -352,6 +365,7 @@ def scroll_continuous_helper():
     if scroll_amount and (
         eye_zoom_mouse.zoom_mouse.state == eye_zoom_mouse.STATE_IDLE
     ):  # or eye_zoom_mouse.zoom_mouse.state == eye_zoom_mouse.STATE_SLEEP):
+        #print('HERE 1')
         actions.mouse_scroll(by_lines=False, y=int(scroll_amount / 10))
 
 
@@ -389,6 +403,7 @@ def gaze_scroll():
 
         midpoint = rect.y + rect.height / 2
         amount = int(((y - midpoint) / (rect.height / 10)) ** 3)
+        #print('HERE 2')
         actions.mouse_scroll(by_lines=False, y=amount)
 
     # print(f"gaze_scroll: {midpoint} {rect.height} {amount}")

@@ -1,6 +1,17 @@
 # https://talonvoice.slack.com/archives/G9YTMSZ2T/p1633126802119900
 from talon import speech_system
 def print_timings(j):
+    phrase = None
+    if "phrase" in j:
+        if "parsed" in j:
+            phrase = getattr(j["parsed"], "_unmapped", j["phrase"])
+        else:
+            phrase = j["phrase"]
+
+        phrase = " ".join(word.split("\\")[0] for word in phrase)
+
+    print(f"'{phrase}'")
+
     if '_metadata' in j:
         meta = j['_metadata']
         status  = f"[audio]={meta['audio_ms']:.3f}ms "

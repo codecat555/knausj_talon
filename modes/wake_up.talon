@@ -11,6 +11,7 @@ mode: all
     user.homophones_hide()
     user.help_hide()
     user.mouse_sleep()
+    user.mouse_show_cursor()
     sound.set_microphone('None')
     speech.disable()
     user.engine_sleep()
