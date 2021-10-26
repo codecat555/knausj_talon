@@ -417,7 +417,6 @@ def refresh_context_command_map(enabled_only=False):
 
     import time
     cumulative_time = 0
-    context_command_map = {}
     for context_name, context in registry.contexts.items():
         splits = context_name.split(".")
 
