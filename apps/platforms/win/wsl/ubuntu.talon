@@ -1,6 +1,6 @@
 app: ubuntu
 app: windows_terminal
-win.title: /WSL:Ubuntu/
+win.title: /^WSL:/
 -
 tag(): terminal
 tag(): user.file_manager
