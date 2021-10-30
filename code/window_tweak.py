@@ -4,7 +4,7 @@ Tools for managing window size and position.
 
 from typing import Dict
 
-import time
+import math
 from talon import ui, Module, actions
 
 Direction = Dict[str, bool]
@@ -57,6 +57,60 @@ def _win_move_pixels(w: ui.Window, direction:Direction, delta_width: int, delta_
             actions.sleep("100ms")
             print(f'_win_move_pixels: after: {ui.active_window().rect=}')
 
+def _win_size_pixels(w: ui.Window, direction:Direction, delta_width: int, delta_height: int) -> None:
+    # start with the current values
+    new_x = w.rect.x
+    new_y = w.rect.y
+    new_width = w.rect.width
+    new_height = w.rect.height
+
+    # invert directions when shrinking. that is, we are shrinking *toward* the
+    #  given direction rather than shrinking away from that direction.
+    if delta_width < 0:
+        temp = direction["right"]
+        direction["right"] = direction["left"]
+        direction["left"] = temp
+    #
+    if delta_height < 0:
+        temp = direction["up"]
+        direction["up"] = direction["down"]
+        direction["down"] = temp
+    
+    # apply changes as indicated
+    if direction["left"]:
+        new_x -= delta_width          
+    #            
+    if direction["up"]:
+        new_y -= delta_height
+    #
+    if direction["left"] or direction["right"]:
+        new_width += delta_width
+    #
+    if direction["up"] or direction["down"]:
+        new_height += delta_height
+
+    # make it so
+    w.rect = ui.Rect(new_x, new_y, new_width, new_height)
+
+def get_component_distances(w, direction, distance):
+        # are we moving diagonally?
+        direction_count = sum(direction.values())
+
+        delta_width = delta_height = 0
+        if direction_count  > 1:    # diagonal    
+            #diagonal_length = math.sqrt(pow(w.rect.width - w.rect.x, 2) + pow(w.rect.height - w.rect.y, 2))
+            diagonal_length = math.sqrt(((w.rect.width - w.rect.x) ** 2) + ((w.rect.height - w.rect.y) ** 2))
+            ratio = distance / diagonal_length
+            delta_width = w.rect.width * ratio
+            delta_height = w.rect.height * ratio
+        else:  # horizontal or vertical  
+            if direction["left"] or direction["right"]:
+                delta_width = distance
+            elif direction["up"] or direction["down"]:
+                delta_height = distance
+
+        return delta_width, delta_height
+        
 @mod.action_class
 class Actions:
     # def win_move_absolute(x:int, y:int) -> None:
@@ -90,23 +144,9 @@ class Actions:
         "move window some number of pixels"
         w = ui.active_window()
 
-        # are we moving diagonally?
-        direction_count = sum(direction.values())
-        assert(direction_count <= 2)
+        delta_width, delta_height = get_component_distances(w, direction, distance)
 
-        delta_width = delta_height = 0
-        if direction_count == 1:
-            if direction["left"] or direction["right"]:
-                delta_width = distance
-            elif direction["up"] or direction["down"]:
-                delta_height = distance
-        elif direction_count == 2:
-            diagonal_length = sqrt(pow(w.rect.width - w.rect.x, 2) + pow(w.rect.height - w.rect.y, 2))
-            ratio = distance / diagonal_length
-            delta_width = w.rect.width * ratio
-            delta_height = w.rect.height * ratio
-
-        _win_move_pixels(w, direction, delta_width, delta_height)  
+        _win_move_pixels(w, direction, delta_width, delta_height)
     
     def win_move_percent(direction:Direction, percent:int) -> None:
         "move window some percentage of the current size"
@@ -118,42 +158,20 @@ class Actions:
 
         _win_move_pixels(w, direction, delta_width, delta_height)  
     
-    def win_size_percent(direction:Direction, percent:int) -> None:
-        "size window as a percentage of current size"
+    def win_size_pixels(direction:Direction, distance: int) -> None:
+        "change window size by pixels"
+        w = ui.active_window()
         
-        if percent < 0:
-            # invert directions when shrinking. that is, we are shrinking *toward* the
-            #  given direction rather than shrinking away from that direction.
-            direction = {
-                "up": direction["down"],
-                "down": direction["up"],
-                "right": direction["left"],
-                "left": direction["right"]
-            }
+        delta_width, delta_height = get_component_distances(w, direction, distance)
+
+        _win_size_pixels(w, direction, delta_width, delta_height)
+
+    def win_size_percent(direction:Direction, percent:int) -> None:
+        "change window size by a percentage of current size"
         
         w = ui.active_window()
 
         delta_width = w.rect.width * (percent/100)
         delta_height = w.rect.height * (percent/100)
 
-        # start with the current values
-        new_x = w.rect.x
-        new_y = w.rect.y
-        new_width = w.rect.width
-        new_height = w.rect.height
-
-        # apply changes as indicated
-        if direction["left"]:
-            new_x -= delta_width          
-        #            
-        if direction["up"]:
-            new_y -= delta_height
-        #
-        if direction["left"] or direction["right"]:
-            new_width += delta_width
-        #
-        if direction["up"] or direction["down"]:
-            new_height += delta_height
-
-        # make it so
-        w.rect = ui.Rect(new_x, new_y, new_width, new_height)
+        _win_size_pixels(w, direction, delta_width, delta_height)
