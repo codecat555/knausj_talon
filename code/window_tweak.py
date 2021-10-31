@@ -52,6 +52,9 @@ def _win_move_pixels(w: ui.Window, direction:Direction, delta_width: int, delta_
         test0 = False
         if test0:
             print(f'_win_move_pixels: before: {ui.active_window().rect=}')
+
+        #new_x, new_y, delta_width, delta_height = clip_to_screen(new_x, new_y, new_width, new_height)
+
         w.rect = ui.Rect(new_x, new_y, w.rect.width, w.rect.height)
         if test0:
             actions.sleep("100ms")
@@ -88,6 +91,8 @@ def _win_size_pixels(w: ui.Window, direction:Direction, delta_width: int, delta_
     #
     if direction["up"] or direction["down"]:
         new_height += delta_height
+
+    #new_x, new_y, delta_width, delta_height = clip_to_screen(new_x, new_y, new_width, new_height)
 
     # make it so
     w.rect = ui.Rect(new_x, new_y, new_width, new_height)
@@ -174,4 +179,16 @@ class Actions:
         delta_width = w.rect.width * (percent/100)
         delta_height = w.rect.height * (percent/100)
 
+        _win_size_pixels(w, direction, delta_width, delta_height)
+
+    def win_snap_percent(percent: int) -> None:
+        "change window size to some percentage of parent screen (in each direction)"
+
+        direction = compass_direction(['all'])
+        
+        w = ui.active_window()
+
+        delta_width = (w.screen.visible_rect.width * (percent/100)) - w.rect.width
+        delta_height = (w.screen.visible_rect.height * (percent/100)) - w.rect.height
+        
         _win_size_pixels(w, direction, delta_width, delta_height)
