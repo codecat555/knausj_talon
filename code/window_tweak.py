@@ -32,7 +32,7 @@ def compass_direction(m) -> Direction:
 
     return result
 
-def _win_move_pixels(w: ui.Window, direction:Direction, delta_width: int, delta_height: int) -> None:
+def _win_move_pixels_relative(w: ui.Window, direction:Direction, delta_width: int, delta_height: int) -> None:
         # start with the current values
         new_x = w.rect.x
         new_y = w.rect.y
@@ -60,7 +60,7 @@ def _win_move_pixels(w: ui.Window, direction:Direction, delta_width: int, delta_
             actions.sleep("100ms")
             print(f'_win_move_pixels: after: {ui.active_window().rect=}')
 
-def _win_size_pixels(w: ui.Window, direction:Direction, delta_width: int, delta_height: int) -> None:
+def _win_size_pixels_relative(w: ui.Window, direction:Direction, delta_width: int, delta_height: int) -> None:
     # start with the current values
     new_x = w.rect.x
     new_y = w.rect.y
@@ -97,7 +97,7 @@ def _win_size_pixels(w: ui.Window, direction:Direction, delta_width: int, delta_
     # make it so
     w.rect = ui.Rect(new_x, new_y, new_width, new_height)
 
-def get_component_distances(w, direction, distance):
+def _get_component_distances(w, direction, distance):
         # are we moving diagonally?
         direction_count = sum(direction.values())
 
@@ -118,18 +118,22 @@ def get_component_distances(w, direction, distance):
         
 @mod.action_class
 class Actions:
-    # def win_move_absolute(x:int, y:int) -> None:
-    #     "Move window to given absolute position"
-    #     ui.active_window().move(x, y)
-
+    def win_move_absolute(x:int, y:int) -> None:
+        "Move window to given absolute position"
+        #ui.active_window().move(x, y)
+        w = ui.active_window()
+        w.rect = ui.Rect(x, y, w.rect.width, w.rect.height)
+        
     # def win_move_relative(x:int, y:int) -> None:
     #     "Move window to given relative resize"
     #     w = ui.active_window()
     #     w.move(w.rect.x + x, w.rect.y + y)
     
-    # def win_size_absolute(width:int, height:int) -> None:
-    #     "size window to given absolute dimensions"
-    #     ui.active_window().resize(width, height)
+    def win_size_absolute(width:int, height:int) -> None:
+        "size window to given absolute dimensions"
+        #ui.active_window().resize(width, height)
+        w = ui.active_window()
+        w.rect = ui.Rect(w.rect.x, w.rect.y, width, height)
 
     # def win_size_relative(width:int, height:int) -> None:
     #     "size window to given relative dimensions"
@@ -149,9 +153,9 @@ class Actions:
         "move window some number of pixels"
         w = ui.active_window()
 
-        delta_width, delta_height = get_component_distances(w, direction, distance)
+        delta_width, delta_height = _get_component_distances(w, direction, distance)
 
-        _win_move_pixels(w, direction, delta_width, delta_height)
+        _win_move_pixels_relative(w, direction, delta_width, delta_height)
     
     def win_move_percent(direction:Direction, percent:int) -> None:
         "move window some percentage of the current size"
@@ -161,15 +165,15 @@ class Actions:
         delta_width = w.rect.width * (percent/100)
         delta_height = w.rect.height * (percent/100)
 
-        _win_move_pixels(w, direction, delta_width, delta_height)  
+        _win_move_pixels_relative(w, direction, delta_width, delta_height)  
     
     def win_size_pixels(direction:Direction, distance: int) -> None:
         "change window size by pixels"
         w = ui.active_window()
         
-        delta_width, delta_height = get_component_distances(w, direction, distance)
+        delta_width, delta_height = _get_component_distances(w, direction, distance)
 
-        _win_size_pixels(w, direction, delta_width, delta_height)
+        _win_size_pixels_relative(w, direction, delta_width, delta_height)
 
     def win_size_percent(direction:Direction, percent:int) -> None:
         "change window size by a percentage of current size"
@@ -179,7 +183,7 @@ class Actions:
         delta_width = w.rect.width * (percent/100)
         delta_height = w.rect.height * (percent/100)
 
-        _win_size_pixels(w, direction, delta_width, delta_height)
+        _win_size_pixels_relative(w, direction, delta_width, delta_height)
 
     def win_snap_percent(percent: int) -> None:
         "change window size to some percentage of parent screen (in each direction)"
@@ -191,4 +195,4 @@ class Actions:
         delta_width = (w.screen.visible_rect.width * (percent/100)) - w.rect.width
         delta_height = (w.screen.visible_rect.height * (percent/100)) - w.rect.height
         
-        _win_size_pixels(w, direction, delta_width, delta_height)
+        _win_size_pixels_relative(w, direction, delta_width, delta_height)

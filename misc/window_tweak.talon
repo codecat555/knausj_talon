@@ -8,6 +8,9 @@ win move <user.compass_direction> <number> percent:
 win move <user.compass_direction> <number> pixels:
     user.win_move_pixels(compass_direction, number)
 
+win move <number> at <number>:
+    user.win_move_absolute(number_1, number_2)
+
 win stretch <user.compass_direction> <number> percent:
     user.win_size_percent(compass_direction, number)
     
@@ -22,3 +25,6 @@ win shrink <user.compass_direction> <number> pixels:
 
 win snap <number> percent:
     user.win_snap_percent(number)
+
+win size <number> by <number>:
+    user.win_size_absolute(number_1, number_2)
