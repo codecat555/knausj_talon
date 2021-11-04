@@ -35,7 +35,7 @@ def compass_direction(m) -> Direction:
 
     return result
 
-def _win_move_pixels_relative(w: ui.Window, direction:Direction, delta_width: int, delta_height: int) -> None:
+def _win_move_pixels_relative(w: ui.Window, direction: Direction, delta_width: int, delta_height: int) -> None:
         # start with the current values
         new_x = w.rect.x
         new_y = w.rect.y
@@ -64,7 +64,7 @@ def _win_move_pixels_relative(w: ui.Window, direction:Direction, delta_width: in
             actions.sleep("100ms")
             print(f'_win_move_pixels: after: {ui.active_window().rect=}')
 
-def _win_size_pixels_relative(w: ui.Window, direction:Direction, delta_width: int, delta_height: int) -> None:
+def _win_size_pixels_relative(w: ui.Window, delta_width: int, delta_height: int, direction: Direction) -> None:
     # start with the current values
     new_x = w.rect.x
     new_y = w.rect.y
@@ -101,7 +101,7 @@ def _win_size_pixels_relative(w: ui.Window, direction:Direction, delta_width: in
     # make it so
     w.rect = ui.Rect(new_x, new_y, new_width, new_height)
 
-def _get_component_distances(w:ui.Window, direction:Direction, distance:int):
+def _get_component_distances(w: ui.Window, distance: int, direction: Direction):
         # are we moving diagonally?
         direction_count = sum(direction.values())
 
@@ -119,7 +119,7 @@ def _get_component_distances(w:ui.Window, direction:Direction, distance:int):
 
         return delta_width, delta_height
 
-def _translate_top_left_by_region(w:ui.Window, x:int, y:int, direction:Direction) -> Tuple[int, int]:
+def _translate_top_left_by_region(w: ui.Window, x: int, y: int, direction: Direction) -> Tuple[int, int]:
     
     width = w.rect.width
     height = w.rect.height
@@ -167,31 +167,31 @@ def _translate_top_left_by_region(w:ui.Window, x:int, y:int, direction:Direction
         
     return x, y
 
-def _clip_to_screen(w:ui.Window, x: int, y: int) -> Tuple[int, int]:
-    screen = w.screen.visible_rect
-    if x < screen.x:
-        if testing:
-            actions.insert(f'x too small, clipping: {x,y}\n')
-        x = screen.x
-    elif x > screen.x + screen.width:
-        if testing:
-            actions.insert(f'x too big, clipping: {x,y}\n')
-        x = screen.x + screen.width
-    elif y < screen.y:
-        if testing:
-            actions.insert(f'y too small, clipping: {x,y}\n')
-        y = screen.y
-    elif y > screen.y + screen.height:
-        if testing:
-            actions.insert(f'y too big, clipping: {x,y}\n')
-        y = screen.y + screen.height
+# def _clip_to_screen(w: ui.Window, x: int, y: int) -> Tuple[int, int]:
+#     screen = w.screen.visible_rect
+#     if x < screen.x:
+#         if testing:
+#             actions.insert(f'x too small, clipping: {x,y}\n')
+#         x = screen.x
+#     elif x > screen.x + screen.width:
+#         if testing:
+#             actions.insert(f'x too big, clipping: {x,y}\n')
+#         x = screen.x + screen.width
+#     elif y < screen.y:
+#         if testing:
+#             actions.insert(f'y too small, clipping: {x,y}\n')
+#         y = screen.y
+#     elif y > screen.y + screen.height:
+#         if testing:
+#             actions.insert(f'y too big, clipping: {x,y}\n')
+#         y = screen.y + screen.height
 
-    return x, y
+#     return x, y
 
 # phrase management code lifted from history.py
 def parse_phrase(word_list):
     return " ".join(word.split("\\")[0] for word in word_list)
-
+#
 def on_phrase(j):
     global last_phrase
 
@@ -200,12 +200,12 @@ def on_phrase(j):
         last_phrase = parse_phrase(getattr(j["parsed"], "_unmapped", j["phrase"]))
     except:
         last_phrase = parse_phrase(j["phrase"])
-
+#
 speech_system.register("phrase", on_phrase)
 
 @mod.action_class
 class Actions:
-    def win_move_absolute(x_in:int, y_in:int, region:Optional[Direction] = None) -> None:
+    def win_move_absolute(x_in: int, y_in: int, region: Optional[Direction] = None) -> None:
         "Move window to given absolute position, centered on the point by the given region"
         w = ui.active_window()
         x = x_in
@@ -232,7 +232,7 @@ class Actions:
             actions.insert(f'result: {w.rect}\n\n')
             ctrl.mouse_move(x_in, y_in)
     
-    def win_size_absolute(width:int, height:int, region:Optional[Direction] = None) -> None:
+    def win_size_absolute(width: int, height: int, region: Optional[Direction] = None) -> None:
         "Size window to given absolute dimensions, optionally by stretching/shrinking in the direction indicated by the given region"
         w = ui.active_window()
 
@@ -260,24 +260,15 @@ class Actions:
             actions.sleep("50ms")
             actions.insert(f'result: {w.rect}\n\n')
 
-    def win_test_reset() -> None:
-        "reset size and position of test window"
-        # make it so
-        w = ui.active_window()
-        w.rect = ui.Rect(100,100,1000,1000)
-        while not ui.active_window().rect.x == 100 and not ui.active_window().rect.y == 100 and not ui.active_window().rect.width == 1000 and not ui.active_window().rect.height == 1000:
-            print(f'reset test window: {ui.active_window().rect=}')
-        print(f'reset test window: {ui.active_window().rect=}')
-
-    def win_move_pixels(direction:Direction, distance: int) -> None:
+    def win_move_pixels(distance: int, direction: Direction) -> None:
         "move window some number of pixels"
         w = ui.active_window()
 
-        delta_width, delta_height = _get_component_distances(w, direction, distance)
+        delta_width, delta_height = _get_component_distances(w, distance, direction)
 
         _win_move_pixels_relative(w, direction, delta_width, delta_height)
     
-    def win_move_percent(direction:Direction, percent:int) -> None:
+    def win_move_percent(percent: int, direction: Direction) -> None:
         "move window some percentage of the current size"
 
         w = ui.active_window()
@@ -286,16 +277,16 @@ class Actions:
         delta_height = w.rect.height * (percent/100)
 
         _win_move_pixels_relative(w, direction, delta_width, delta_height)  
-    
-    def win_size_pixels(direction:Direction, distance: int) -> None:
+
+    def win_size_pixels(distance: int, direction: Direction) -> None:
         "change window size by pixels"
         w = ui.active_window()
         
-        delta_width, delta_height = _get_component_distances(w, direction, distance)
+        delta_width, delta_height = _get_component_distances(w, distance, direction)
 
-        _win_size_pixels_relative(w, direction, delta_width, delta_height)
+        _win_size_pixels_relative(w, delta_width, delta_height, direction)
 
-    def win_size_percent(direction:Direction, percent:int) -> None:
+    def win_size_percent(percent: int, direction: Direction) -> None:
         "change window size by a percentage of current size"
         
         w = ui.active_window()
@@ -303,7 +294,7 @@ class Actions:
         delta_width = w.rect.width * (percent/100)
         delta_height = w.rect.height * (percent/100)
 
-        _win_size_pixels_relative(w, direction, delta_width, delta_height)
+        _win_size_pixels_relative(w, delta_width, delta_height, direction)
 
     def win_snap_percent(percent: int) -> None:
         "change window size to some percentage of parent screen (in each direction)"
@@ -315,7 +306,7 @@ class Actions:
         delta_width = (w.screen.visible_rect.width * (percent/100)) - w.rect.width
         delta_height = (w.screen.visible_rect.height * (percent/100)) - w.rect.height
         
-        _win_size_pixels_relative(w, direction, delta_width, delta_height)
+        _win_size_pixels_relative(w, delta_width, delta_height, direction)
 
     def win_revert() -> None:
         "restore current window's last remembered size and position"
