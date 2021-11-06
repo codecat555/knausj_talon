@@ -6,15 +6,21 @@ from typing import Dict, Tuple, Optional
 
 import time
 import math
+import queue
+import logging
+import sys
 from talon import ui, Module, actions, speech_system, ctrl
+from talon.debug import log_exception
 
 Direction = Dict[str, bool]
 
 testing = True
 
+last_window: Dict = None
+
 mod = Module()
 
-# taken from https://talon.wiki/unofficial_talon_docs/#captures
+# taken from https: // talon.wiki/unofficial_talon_docs/#captures
 @mod.capture(rule="all | ((north | south) [(east | west)] | east | west)")
 def compass_direction(m) -> Direction:
     """
@@ -52,16 +58,12 @@ def _win_move_pixels_relative(w: ui.Window, direction: Direction, delta_width: i
             new_y += delta_height
 
         # make it so
-        test0 = False
-        if test0:
+        if testing:
             print(f'_win_move_pixels: before: {ui.active_window().rect=}')
 
-        # WIP - clipping only added to avoid talon insert looping bug
-        #new_x, new_y, delta_width, delta_height = clip_to_screen(new_x, new_y, new_width, new_height)
-
-        w.rect = ui.Rect(new_x, new_y, w.rect.width, w.rect.height)
-        if test0:
-            actions.sleep("100ms")
+        _win_set_rect(w, ui.Rect(new_x, new_y, w.rect.width, w.rect.height))
+        
+        if testing:
             print(f'_win_move_pixels: after: {ui.active_window().rect=}')
 
 def _win_size_pixels_relative(w: ui.Window, delta_width: int, delta_height: int, direction: Direction) -> None:
@@ -96,52 +98,67 @@ def _win_size_pixels_relative(w: ui.Window, delta_width: int, delta_height: int,
     if direction["up"] or direction["down"]:
         new_height += delta_height
 
-    #new_x, new_y, delta_width, delta_height = clip_to_screen(new_x, new_y, new_width, new_height)
-
     # make it so
-    w.rect = ui.Rect(new_x, new_y, new_width, new_height)
+    _win_set_rect(w, ui.Rect(new_x, new_y, new_width, new_height))
 
-def _get_component_distances(w: ui.Window, distance: int, direction: Direction):
-        # are we moving diagonally?
-        direction_count = sum(direction.values())
+def _get_diagonal_length(w: ui.Window) -> int:
+    return math.sqrt(((w.rect.width - w.rect.x) ** 2) + ((w.rect.height - w.rect.y) ** 2))
 
-        delta_width = delta_height = 0
-        if direction_count  > 1:    # diagonal    
-            diagonal_length = math.sqrt(((w.rect.width - w.rect.x) ** 2) + ((w.rect.height - w.rect.y) ** 2))
-            ratio = distance / diagonal_length
-            delta_width = w.rect.width * ratio
-            delta_height = w.rect.height * ratio
-        else:  # horizontal or vertical  
-            if direction["left"] or direction["right"]:
-                delta_width = distance
-            elif direction["up"] or direction["down"]:
-                delta_height = distance
+def _get_component_distances(w: ui.Window, distance: int, direction: Direction) -> Tuple[int, int]:
+    # are we moving diagonally?
+    direction_count = sum(direction.values())
 
-        return delta_width, delta_height
+    delta_width = delta_height = 0
+    if direction_count  > 1:    # diagonal    
+        diagonal_length = _get_diagonal_length(w)
+        ratio = distance / diagonal_length
+        delta_width = w.rect.width * ratio
+        delta_height = w.rect.height * ratio
+    else:  # horizontal or vertical  
+        if direction["left"] or direction["right"]:
+            delta_width = distance
+        elif direction["up"] or direction["down"]:
+            delta_height = distance
 
-def _translate_top_left_by_region(w: ui.Window, x: int, y: int, direction: Direction) -> Tuple[int, int]:
+    return delta_width, delta_height
+
+def _get_component_percentages(w: ui.Window, percent: int, direction: Direction) -> Tuple[int, int]:
+    direction_count = sum(direction.values())
+    if direction_count  > 1:    # diagonal
+        diagonal_length = _get_diagonal_length(w)
+        distance = (diagonal_length * (percent/100))
+    else:  # horizontal or vertical  
+        if direction["left"] or direction["right"]:
+            distance = (w.rect.width * (percent/100))
+        elif direction["up"] or direction["down"]:
+            distance =  (w.rect.height * (percent/100))
+        
+    return _get_component_distances(w, distance, direction)
+        
+def _translate_top_left_by_region_for_move(w: ui.Window, target_x: int, target_y: int, direction: Direction) -> Tuple[int, int]:
     
     width = w.rect.width
     height = w.rect.height
 
     if testing:
-        actions.insert(f"_translate_top_left_by_region: initial position: {x=}, {y=}, {width=}, {height=}\n")
+        print(f"_translate_top_left_by_region: initial rect: {w.rect}\n")
+        print(f"_translate_top_left_by_region: move coordinates: {target_x=}, {target_y=}\n")
     
     direction_count = sum(direction.values())
     if direction_count == 1:
         if direction["left"]:
-            y = y - int((height/2))
+            target_y = target_y - height // 2
         
         elif direction["right"]:
-            x = x - width
-            y = y - int((height/2))
+            target_x = target_x - width
+            target_y = target_y - height // 2
 
         elif direction["up"]:
-            x = x - int((width/2))
+            target_x = target_x - width // 2
         
         elif direction["down"]:
-            x = x - int((width/2))
-            y = y - height
+            target_x = target_x - width // 2
+            target_y = target_y - height
     
     elif direction_count == 2:
         if direction["left"] and direction["up"]:
@@ -149,44 +166,143 @@ def _translate_top_left_by_region(w: ui.Window, x: int, y: int, direction: Direc
             pass
 
         elif direction["right"] and direction["up"]:
-            x = x - width
+            target_x = target_x - width
 
         elif direction["right"] and direction["down"]:
-            x = x - width
-            y = y - height
+            target_x = target_x - width
+            target_y = target_y - height
 
         elif direction["left"] and direction["down"]:
-            y = y - height
+            target_y = target_y - height
 
     elif direction_count == 4:
-        x = x - int((width/2))
-        y = y - int((height/2))
+        target_x = target_x - width // 2
+        target_y = target_y - height // 2
         
     if testing:
-        actions.insert(f"_translate_top_left_by_region: translated position: {x=}, {y=}, {width=}, {height=}\n")
+        print(f"_translate_top_left_by_region: translated position: {target_x=}, {target_y=}, {width=}, {height=}\n")
+        
+    return target_x, target_y
+
+def _translate_top_left_by_region_for_resize(w: ui.Window, target_width: int, target_height: int, direction: Direction) -> Tuple[int, int]:
+
+    x = w.rect.x
+    y = w.rect.y
+
+    delta_width = target_width - w.rect.width
+    delta_height = target_height - w.rect.height
+        
+    if testing:
+        print(f"_translate_top_left_by_region_for_resize: initial rect: {w.rect}\n")
+        print(f"_translate_top_left_by_region_for_resize: resize coordinates: {target_width=}, {target_height=}\n")
+    
+    direction_count = sum(direction.values())
+    if direction_count == 1:
+        if direction["left"]:
+            # stretching west, x coordinate must not change for the eastern corners, so push top left to the west
+            x = x - delta_width
+            
+            # adjust y to account for half the change in height
+            y = y - delta_height // 2 
+        
+        elif direction["right"]:
+            # we are stretching east, so the x coordinate must not change for the western corners, i.e. top left
+            
+            # adjust y to account for half the change in height
+            y = y - delta_height // 2 
+
+        elif direction["up"]:
+            # stretching north, y coordinate must not change for the southern corners,
+            # adjust x to account for half the change in width
+            x = x - delta_width // 2  
+            
+            # adjust y to account for the entire change in height
+            y = y - delta_height
+        
+        elif direction["down"]:
+            # stretching south, y coordinate must not change for the northern corners, i.e. top left
+            
+            # adjust x to account for half the change in width
+            x = x - delta_width // 2  
+    
+    elif direction_count == 2:
+        if direction["left"] and direction["up"]:
+            # we are stretching northwest so the coordinates must not change for the southeastern corner
+            x = x - delta_width
+            y = y - delta_height
+
+        elif direction["right"] and direction["up"]:
+            # we are stretching northeast so the coordinates must not change for the southwestern corner,
+            # adjust y to account for the entire change in height
+            y = y - delta_height
+
+        elif direction["right"] and direction["down"]:
+            # we are stretching southeast so the coordinates must not change for the northwestern corner,
+            # nothing to do here x and y are already set correctly for this case
+            pass
+
+        elif direction["left"] and direction["down"]:
+            # we are stretching southwest so the coordinates must not change for the northeastern corner,
+            # adjust x to account for the entire change in width
+            x = x - delta_width
+
+    elif direction_count == 4:
+        x = x - delta_width // 2
+        y = y - delta_height // 2
+        
+    if testing:
+        print(f"_translate_top_left_by_region_for_resize: translated position: {x=}, {y=}, {target_width=}, {target_height=}\n")
         
     return x, y
 
-# def _clip_to_screen(w: ui.Window, x: int, y: int) -> Tuple[int, int]:
-#     screen = w.screen.visible_rect
-#     if x < screen.x:
-#         if testing:
-#             actions.insert(f'x too small, clipping: {x,y}\n')
-#         x = screen.x
-#     elif x > screen.x + screen.width:
-#         if testing:
-#             actions.insert(f'x too big, clipping: {x,y}\n')
-#         x = screen.x + screen.width
-#     elif y < screen.y:
-#         if testing:
-#             actions.insert(f'y too small, clipping: {x,y}\n')
-#         y = screen.y
-#     elif y > screen.y + screen.height:
-#         if testing:
-#             actions.insert(f'y too big, clipping: {x,y}\n')
-#         y = screen.y + screen.height
+def _win_set_rect(w: ui.Window, rect: ui.Rect) -> None:
+    # adapted from https: // talonvoice.slack.com/archives/C9MHQ4AGP/p1635971780355900
+    q = queue.Queue()
+    def on_update(event_win):
+        if event_win == w and w.rect != old_rect:
+            q.put(1)
+    #
+    old_rect = w.rect
+    event_count = 0
+    if (rect.x, rect.y) != (w.rect.x, w.rect.y):
+        ui.register('win_move',   on_update)
+        event_count += 1
+    if (rect.width, rect.height) != (w.rect.width, w.rect.height):
+        ui.register('win_resize', on_update)
+        event_count += 1
+    if event_count == 0:
+        # no real work to do
+        return
 
-#     return x, y
+    w.rect = rect
+    try:
+        # for testing
+        #raise queue.Empty()
+        #raise Exception('just testing') 
+
+        q.get(timeout=0.3)
+        if event_count == 2:
+            q.get(timeout=0.3)
+    except queue.Empty:
+        logging.warning('timed out waiting for window update')
+    except:
+        log_exception(f'{sys.exc_info()[1]}')        
+    else:
+        # results are not guaranteed, warn if the request could not be fulfilled exactly
+        if (rect.x, rect.y) != (w.rect.x, w.rect.y):
+            logging.warning('after update, window position does not exactly match request')
+        if (rect.width, rect.height) != (w.rect.width, w.rect.height):
+            logging.warning('after update, window size does not exactly match request')
+
+        # remember old rectangle
+        global last_window
+        last_window = {
+            'id': w.id,
+            'rect': old_rect
+        }
+    finally:
+        ui.unregister('win_move',   on_update)
+        ui.unregister('win_resize', on_update)
 
 # phrase management code lifted from history.py
 def parse_phrase(word_list):
@@ -212,53 +328,56 @@ class Actions:
         y = y_in
 
         if testing:
-            actions.insert(f'cmd: "{last_phrase}"\n')
+            print(f'cmd: "{last_phrase}"\n')
 
         # find the point which we will move to the given coordinates, as indicated by the region.
         if region:
-            x, y = _translate_top_left_by_region(w, x, y, region)
+            x, y = _translate_top_left_by_region_for_move(w, x, y, region)
 
             if testing:
-                actions.insert(f'translated top left position: {x,y}\n')
+                print(f'translated top left position: {x,y}\n')
         
-        w.rect = ui.Rect(x, y, w.rect.width, w.rect.height)
+        _win_set_rect(w, ui.Rect(x, y, w.rect.width, w.rect.height))
 
         if testing:
-            while not w.rect.x == x and not w.rect.y == y:
-                actions.insert(f'{time.time()} waiting for changes to take effect: {ui.active_window().rect=}\n')
-            # need to wait just a bit longer before the change is stable...otherwise the subsequent insert
-            # will not always reflect the updated values
-            actions.sleep("50ms")
-            actions.insert(f'result: {w.rect}\n\n')
+            print(f'result: {w.rect}\n\n')
             ctrl.mouse_move(x_in, y_in)
     
-    def win_size_absolute(width: int, height: int, region: Optional[Direction] = None) -> None:
+    def win_size_absolute(target_width: int, target_height: int, region_in: Optional[Direction] = None) -> None:
         "Size window to given absolute dimensions, optionally by stretching/shrinking in the direction indicated by the given region"
         w = ui.active_window()
 
         if testing:
-            actions.insert(f'cmd: "{last_phrase}"\n')
+            print(f'cmd: "{last_phrase}"\n')
 
         # find the point which we will move to the given coordinates, as indicated by the region.
         x = w.rect.x
         y = w.rect.y
-        if region:
-            x, y = _translate_top_left_by_region(w, x, y, region)
+        delta_width = target_width - w.rect.width
+        delta_height = target_height - w.rect.height
+
+        region = region_in
+        if region_in:
+            # invert directions when shrinking. that is, we are shrinking *toward* the
+            #  given direction rather than shrinking away from that direction.
+            if delta_width < 0:
+                region["left"] = region_in["right"]
+                region["right"] = region_in["left"]
+            #
+            if delta_height < 0:
+                region["up"] = region_in["down"]
+                region["down"] = region_in["up"]
+
+            x, y = _translate_top_left_by_region_for_resize(w, target_width, target_height, region)
             
             if testing:
-                actions.insert(f'translated top left position: ({x,y})\n')
+                print(f'translated top left position: {x,y}\n')
 
-        #x, y = _clip_to_screen(w, x, y)
+        _win_set_rect(w, ui.Rect(x, y, target_width, target_height))
 
-        w.rect = ui.Rect(x, y, width, height)
-            
         if testing:
-            while not w.rect.width == width and not w.rect.height == height:
-                actions.insert(f'{time.time()} waiting for changes to take effect: {ui.active_window().rect=}\n')
-            # need to wait just a bit longer before the change is stable...otherwise the subsequent insert
-            # will not always reflect the updated values
-            actions.sleep("50ms")
-            actions.insert(f'result: {w.rect}\n\n')
+            print(f'result: {w.rect}\n\n')
+            ctrl.mouse_move(w.rect.x, w.rect.y)
 
     def win_move_pixels(distance: int, direction: Direction) -> None:
         "move window some number of pixels"
@@ -284,15 +403,18 @@ class Actions:
         
         delta_width, delta_height = _get_component_distances(w, distance, direction)
 
+        print(f'win_size_pixels: {delta_width=}, {delta_height=}')
+
         _win_size_pixels_relative(w, delta_width, delta_height, direction)
 
     def win_size_percent(percent: int, direction: Direction) -> None:
         "change window size by a percentage of current size"
         
         w = ui.active_window()
-
-        delta_width = w.rect.width * (percent/100)
-        delta_height = w.rect.height * (percent/100)
+        
+        delta_width, delta_height = _get_component_percentages(w, percent, direction)
+        
+        print(f'win_size_percent: {delta_width=}, {delta_height=}')
 
         _win_size_pixels_relative(w, delta_width, delta_height, direction)
 
@@ -310,4 +432,11 @@ class Actions:
 
     def win_revert() -> None:
         "restore current window's last remembered size and position"
-        print('not implemented yet')
+        
+        w = ui.active_window()
+        
+        if last_window and last_window['id'] == w.id:
+            if testing:
+                print(f'reverting size and/or position for window {w.id}: {w.rect}')
+            _win_set_rect(w, last_window['rect'])
+        

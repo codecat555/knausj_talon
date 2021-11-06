@@ -8,23 +8,23 @@ win move <user.compass_direction> <number_signed> pixels:
 
 win move <number_signed> at <number_signed>:
     user.win_move_absolute(number_signed_1, number_signed_2)
-0
+
 win move <user.compass_direction> <number_signed> at <number_signed>:
     user.win_move_absolute(number_signed_1, number_signed_2, compass_direction)
-    
+
 win stretch <user.compass_direction> <number> percent:
-    user.win_size_percent(-1 * number, compass_direction)
+    user.win_size_percent(number, compass_direction)
     
 win stretch <user.compass_direction> <number> pixels:
     user.win_size_pixels(number, compass_direction)
 
 win shrink <user.compass_direction> <number> percent:
     user.win_size_percent(-1 * number, compass_direction)
-
+    
 win shrink <user.compass_direction> <number> pixels:
     user.win_size_pixels(-1 * number, compass_direction)
 
-win snap <number> percent:
+win snap <number> percent [of screen]:
     user.win_snap_percent(number)
 
 win size <number> by <number>:
