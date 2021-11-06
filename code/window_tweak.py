@@ -41,6 +41,9 @@ def compass_direction(m) -> Direction:
 
     return result
 
+def _win_move_continuous(w: ui.Window, increment: int, direction: Direction) -> None:
+    pass
+
 def _win_move_pixels_relative(w: ui.Window, direction: Direction, delta_width: int, delta_height: int) -> None:
         # start with the current values
         new_x = w.rect.x
@@ -65,6 +68,9 @@ def _win_move_pixels_relative(w: ui.Window, direction: Direction, delta_width: i
         
         if testing:
             print(f'_win_move_pixels: after: {ui.active_window().rect=}')
+
+def _win_size_continuous(w: ui.Window, increment: int, direction: Optional[Direction] = None) -> None:
+    pass
 
 def _win_size_pixels_relative(w: ui.Window, delta_width: int, delta_height: int, direction: Direction) -> None:
     # start with the current values
@@ -319,10 +325,17 @@ def on_phrase(j):
 #
 speech_system.register("phrase", on_phrase)
 
+MOVE_INCREMENT = 1
+RESIZE_INCREMENT = 1
 @mod.action_class
 class Actions:
+    def win_move(direction: Optional[Direction] = None) -> None:
+        "Move window in small increments in the given direction, until stopped"
+        w = ui.active_window()
+        _win_move_continuous(w, MOVE_INCREMENT, direction)
+    
     def win_move_absolute(x_in: int, y_in: int, region: Optional[Direction] = None) -> None:
-        "Move window to given absolute position, centered on the point by the given region"
+        "Move window to given absolute position, centered on the point indicated by the given region"
         w = ui.active_window()
         x = x_in
         y = y_in
@@ -342,6 +355,16 @@ class Actions:
         if testing:
             print(f'result: {w.rect}\n\n')
             ctrl.mouse_move(x_in, y_in)
+    
+    def win_stretch(direction: Optional[Direction] = None) -> None:
+        "Stretch window in small increments until stopped, optionally in the given direction"
+        w = ui.active_window()
+        _win_size_continuous(w, RESIZE_INCREMENT, direction)
+    
+    def win_shrink(direction: Optional[Direction] = None) -> None:
+        "Shrink window in small increments until stopped, optionally in the given direction"
+        w = ui.active_window()
+        _win_size_continuous(w, -RESIZE_INCREMENT, direction)
     
     def win_size_absolute(target_width: int, target_height: int, region_in: Optional[Direction] = None) -> None:
         "Size window to given absolute dimensions, optionally by stretching/shrinking in the direction indicated by the given region"
