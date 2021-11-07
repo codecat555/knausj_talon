@@ -1,5 +1,8 @@
 """
 Tools for managing window size and position.
+
+Continuous move/resize machinery adapted from mouse.py.
+
 """
 
 from typing import Dict, Tuple, Optional
@@ -9,7 +12,7 @@ import math
 import queue
 import logging
 import sys
-from talon import ui, Module, actions, speech_system, ctrl
+from talon import ui, Module, actions, speech_system, ctrl, imgui, cron
 from talon.debug import log_exception
 
 Direction = Dict[str, bool]
@@ -18,7 +21,49 @@ testing = True
 
 last_window: Dict = None
 
+move_width_increment = 0
+move_height_increment = 0
+resize_width_increment = 0
+resize_height_increment = 0
+move_job = None
+resize_job = None
+continuous_mode = ""
+continuous_direction = None
+continuous_old_rect = None
+
 mod = Module()
+
+# WIP - test settings
+setting_win_continuous_move_increment = mod.setting(
+    "win_continuous_move_amount",
+    type=int,
+    default=2,
+    desc="The percent increment used when moving a window continuously",
+)
+setting_win_continuous_resize_increment = mod.setting(
+    "win_continuous_resize_amount",
+    type=int,
+    default=2,
+    desc="The percent increment used when resizing a window continuously",
+)
+setting_win_continuous_frequency = mod.setting(
+    "win_continuous_frequency",
+    type=str,
+    default="100ms",
+    desc="The update frequency used when moving or resizing a window continuously",
+)
+setting_win_hide_move_gui = mod.setting(
+    "win_hide_move_gui",
+    type=int,
+    default=0,
+    desc="When enabled, the 'Move/Resize Window' GUI will not be shown for continuous move operations.",
+)
+setting_win_hide_resize_gui = mod.setting(
+    "win_hide_resize_gui",
+    type=int,
+    default=0,
+    desc="When enabled, the 'Move/Resize Window' GUI will not be shown for continuous resize operations.",
+)
 
 # taken from https: // talon.wiki/unofficial_talon_docs/#captures
 @mod.capture(rule="all | ((north | south) [(east | west)] | east | west)")
@@ -39,12 +84,105 @@ def compass_direction(m) -> Direction:
             "left": "west" in m
         }
 
+    print(f'{result=}')
     return result
 
-def _win_move_continuous(w: ui.Window, increment: int, direction: Direction) -> None:
-    pass
+# WIP - open on target window screen
+@imgui.open(x=700, y=0)
+def gui_win_stop(gui: imgui.GUI):
+    gui.text("Mode: {}".format(continuous_mode))
+    gui.line()
+    if gui.button("Stop moving/resizing"):
+        actions.user.win_stop()
 
-def _win_move_pixels_relative(w: ui.Window, direction: Direction, delta_width: int, delta_height: int) -> None:
+def win_move_continuous_helper():
+    #global move_width_increment, move_height_increment
+    # print("win_move_continuous_helper")
+    if move_width_increment or move_height_increment:
+        w = ui.active_window()
+        _win_move_pixels_relative(w, move_width_increment, move_height_increment, continuous_direction)
+
+def win_resize_continuous_helper():
+    #global resize_width_increment, resize_height_increment
+    # print("win_resize_continuous_helper")
+    if resize_width_increment or resize_height_increment:
+        w = ui.active_window()
+        _win_resize_pixels_relative(w, resize_width_increment, resize_height_increment, continuous_direction)
+              
+def start_move():
+    global move_job
+    move_job = cron.interval(setting_win_continuous_frequency.get(), win_move_continuous_helper)
+
+def start_resize():
+    global resize_job
+    resize_job = cron.interval(setting_win_continuous_frequency.get(), win_resize_continuous_helper)
+
+def _win_move_continuous(w: ui.Window, multiplier: int, direction: Direction) -> None:
+    global continuous_mode, move_width_increment, move_height_increment, continuous_direction, continuous_old_rect
+
+    # WIP - do we need continuous_mode?
+    continuous_mode = "win move"
+
+    continuous_direction = direction
+
+    continuous_old_rect = w.rect
+    
+    move_width_increment, move_height_increment = _get_component_distances_by_percent(w, setting_win_continuous_move_increment.get(), direction)
+    
+    if move_job is None:
+        start_move()
+
+    if setting_win_hide_move_gui.get() == 0:
+        gui_win_stop.show()
+
+def _win_resize_continuous(w: ui.Window, multiplier: int, direction: Optional[Direction] = None) -> None:
+    global continuous_mode, resize_width_increment, resize_height_increment, continuous_direction, continuous_old_rect
+
+    continuous_mode = "win resize"
+
+    continuous_direction = direction
+
+    continuous_old_rect = w.rect
+
+    resize_width_increment, resize_height_increment = _get_component_distances_by_percent(w, setting_win_continuous_resize_increment.get(), direction)
+    resize_width_increment *= multiplier
+    resize_height_increment *= multiplier
+
+    if resize_job is None:
+        start_resize()
+
+    if setting_win_hide_resize_gui.get() == 0:
+        gui_win_stop.show()
+
+def _stop_win():
+    global move_width_increment, move_height_increment, resize_width_increment, resize_height_increment, move_job, resize_job, continuous_mode, continuous_direction
+    global last_window, continuous_old_rect
+    
+    if move_job:
+        cron.cancel(move_job)
+
+    if resize_job:
+        cron.cancel(resize_job)
+
+    # remember starting rectangle
+    last_window = {
+        'id': ui.active_window().id,
+        'rect': continuous_old_rect
+    }
+
+    move_width_increment = 0
+    move_height_increment = 0
+    resize_width_increment = 0
+    resize_height_increment = 0
+    move_job = None
+    resize_job = None
+    continuous_mode = ""
+    continuous_direction = None
+    continuous_old_rect = None
+
+    gui_win_stop.hide()
+        
+def _win_move_pixels_relative(w: ui.Window, delta_width: int, delta_height: int, direction: Direction) -> None:
         # start with the current values
         new_x = w.rect.x
         new_y = w.rect.y
@@ -69,10 +207,7 @@ def _win_move_pixels_relative(w: ui.Window, direction: Direction, delta_width: i
         if testing:
             print(f'_win_move_pixels: after: {ui.active_window().rect=}')
 
-def _win_size_continuous(w: ui.Window, increment: int, direction: Optional[Direction] = None) -> None:
-    pass
-
-def _win_size_pixels_relative(w: ui.Window, delta_width: int, delta_height: int, direction: Direction) -> None:
+def _win_resize_pixels_relative(w: ui.Window, delta_width: int, delta_height: int, direction: Direction) -> None:
     # start with the current values
     new_x = w.rect.x
     new_y = w.rect.y
@@ -128,7 +263,7 @@ def _get_component_distances(w: ui.Window, distance: int, direction: Direction) 
 
     return delta_width, delta_height
 
-def _get_component_percentages(w: ui.Window, percent: int, direction: Direction) -> Tuple[int, int]:
+def _get_component_distances_by_percent(w: ui.Window, percent: int, direction: Direction) -> Tuple[int, int]:
     direction_count = sum(direction.values())
     if direction_count  > 1:    # diagonal
         diagonal_length = _get_diagonal_length(w)
@@ -325,17 +460,53 @@ def on_phrase(j):
 #
 speech_system.register("phrase", on_phrase)
 
-MOVE_INCREMENT = 1
-RESIZE_INCREMENT = 1
+def _move_direction_check(direction: Direction) -> bool:
+    direction_count = sum(direction.values())
+    if direction_count == 4:
+        logging.warning('The "all" direction is not valid for move operations.')
+        return False
+    return True
+
+# WIP - need to find proper formatting for this display
+# WIP - how to position this window on the current screen? (below doesn't work)
+@imgui.open(x=(ui.active_window().screen.x + 700), y=(ui.active_window().screen.y + 0))
+def _show_win(gui: imgui.GUI) -> None:
+    w = ui.active_window()
+    gui.text(f"Window {w.id}: {w.rect=}")
+    screen = w.screen
+    gui.text(f"Screen: {screen.rect=}, {screen.visible_rect=}, {screen.scale=}")
+    gui.line()
+    gui.text(f"Say 'win hide' to close this window.")
+    gui.line()
+    if gui.button("Close"):
+        _show_win.hide()
+
 @mod.action_class
 class Actions:
+    def win_show() -> None:
+        "Shows information about current window position and size"
+        _show_win.show()
+
+    def win_hide() -> None:
+        "Hides the window information window"
+        _show_win.hide()
+        
+    def win_stop() -> None:
+        "Stops current window move/resize operation"
+        _stop_win()
+                
     def win_move(direction: Optional[Direction] = None) -> None:
         "Move window in small increments in the given direction, until stopped"
+        print('win_move: {direction=}\n')
+        if not _move_direction_check(direction):
+            return
+        print('win_move: {direction=}\n')
         w = ui.active_window()
-        _win_move_continuous(w, MOVE_INCREMENT, direction)
+        _win_move_continuous(w, 1, direction)
     
     def win_move_absolute(x_in: int, y_in: int, region: Optional[Direction] = None) -> None:
         "Move window to given absolute position, centered on the point indicated by the given region"
+
         w = ui.active_window()
         x = x_in
         y = y_in
@@ -359,14 +530,14 @@ class Actions:
     def win_stretch(direction: Optional[Direction] = None) -> None:
         "Stretch window in small increments until stopped, optionally in the given direction"
         w = ui.active_window()
-        _win_size_continuous(w, RESIZE_INCREMENT, direction)
+        _win_resize_continuous(w, 1, direction)
     
     def win_shrink(direction: Optional[Direction] = None) -> None:
         "Shrink window in small increments until stopped, optionally in the given direction"
         w = ui.active_window()
-        _win_size_continuous(w, -RESIZE_INCREMENT, direction)
+        _win_resize_continuous(w, -1, direction)
     
-    def win_size_absolute(target_width: int, target_height: int, region_in: Optional[Direction] = None) -> None:
+    def win_resize_absolute(target_width: int, target_height: int, region_in: Optional[Direction] = None) -> None:
         "Size window to given absolute dimensions, optionally by stretching/shrinking in the direction indicated by the given region"
         w = ui.active_window()
 
@@ -404,42 +575,49 @@ class Actions:
 
     def win_move_pixels(distance: int, direction: Direction) -> None:
         "move window some number of pixels"
+
+        if not _move_direction_check(direction):
+            return
+
         w = ui.active_window()
 
         delta_width, delta_height = _get_component_distances(w, distance, direction)
 
-        _win_move_pixels_relative(w, direction, delta_width, delta_height)
+        _win_move_pixels_relative(w, delta_width, delta_height, direction)
     
     def win_move_percent(percent: int, direction: Direction) -> None:
         "move window some percentage of the current size"
+        
+        if not _move_direction_check(direction):
+            return
 
         w = ui.active_window()
 
         delta_width = w.rect.width * (percent/100)
         delta_height = w.rect.height * (percent/100)
 
-        _win_move_pixels_relative(w, direction, delta_width, delta_height)  
+        _win_move_pixels_relative(w, delta_width, delta_height, direction)  
 
-    def win_size_pixels(distance: int, direction: Direction) -> None:
+    def win_resize_pixels(distance: int, direction: Direction) -> None:
         "change window size by pixels"
         w = ui.active_window()
         
         delta_width, delta_height = _get_component_distances(w, distance, direction)
 
-        print(f'win_size_pixels: {delta_width=}, {delta_height=}')
+        print(f'win_resize_pixels: {delta_width=}, {delta_height=}')
 
-        _win_size_pixels_relative(w, delta_width, delta_height, direction)
+        _win_resize_pixels_relative(w, delta_width, delta_height, direction)
 
-    def win_size_percent(percent: int, direction: Direction) -> None:
+    def win_resize_percent(percent: int, direction: Direction) -> None:
         "change window size by a percentage of current size"
         
         w = ui.active_window()
         
-        delta_width, delta_height = _get_component_percentages(w, percent, direction)
+        delta_width, delta_height = _get_component_distances_by_percent(w, percent, direction)
         
-        print(f'win_size_percent: {delta_width=}, {delta_height=}')
+        print(f'win_resize_percent: {delta_width=}, {delta_height=}')
 
-        _win_size_pixels_relative(w, delta_width, delta_height, direction)
+        _win_resize_pixels_relative(w, delta_width, delta_height, direction)
 
     def win_snap_percent(percent: int) -> None:
         "change window size to some percentage of parent screen (in each direction)"
@@ -451,7 +629,7 @@ class Actions:
         delta_width = (w.screen.visible_rect.width * (percent/100)) - w.rect.width
         delta_height = (w.screen.visible_rect.height * (percent/100)) - w.rect.height
         
-        _win_size_pixels_relative(w, delta_width, delta_height, direction)
+        _win_resize_pixels_relative(w, delta_width, delta_height, direction)
 
     def win_revert() -> None:
         "restore current window's last remembered size and position"
