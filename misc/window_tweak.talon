@@ -5,10 +5,9 @@ win show:
 win hide:
     user.win_hide()
 
-# WIP - could define this 'stop' command in a separate context, one enabled by a tag which would be
-# WIP - enabled by the move_start()/resize_start() code and then disabled here after stopping
-# WIP - the current operation. the main benefit would be to disable other voice commands until
-# WIP - the move/resize operation has been completed.
+# could define this 'stop' command in a separate mode. the mode would be entered by the
+# move_start()/resize_start() code and contain just the 'stop' command which, when
+# executed, would then restore the original mode after stopping the move/resize operation.
 win stop:
     user.win_stop()
     

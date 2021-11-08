@@ -2,7 +2,6 @@
 Tools for managing window size and position.
 
 Continuous move/resize machinery adapted from mouse.py.
-
 """
 
 from typing import Dict, Tuple, Optional
@@ -12,7 +11,7 @@ import math
 import queue
 import logging
 import sys
-from talon import ui, Module, actions, speech_system, ctrl, imgui, cron
+from talon import ui, Module, actions, speech_system, ctrl, imgui, cron, settings
 from talon.debug import log_exception
 
 Direction = Dict[str, bool]
@@ -27,45 +26,51 @@ resize_width_increment = 0
 resize_height_increment = 0
 move_job = None
 resize_job = None
-continuous_mode = ""
 continuous_direction = None
 continuous_old_rect = None
+show_win_x = None
+show_win_y = None
 
 mod = Module()
 
-# WIP - test settings
-setting_win_continuous_move_increment = mod.setting(
-    "win_continuous_move_amount",
+mod.setting(
+    "win_continuous_move_increment",
     type=int,
     default=2,
     desc="The percent increment used when moving a window continuously",
 )
-setting_win_continuous_resize_increment = mod.setting(
-    "win_continuous_resize_amount",
+mod.setting(
+    "win_continuous_resize_increment",
     type=int,
     default=2,
     desc="The percent increment used when resizing a window continuously",
 )
-setting_win_continuous_frequency = mod.setting(
-    "win_continuous_frequency",
+mod.setting(
+    "win_move_frequency",
     type=str,
     default="100ms",
-    desc="The update frequency used when moving or resizing a window continuously",
+    desc="The update frequency used when moving a window continuously",
 )
-setting_win_hide_move_gui = mod.setting(
+mod.setting(
+    "win_resize_frequency",
+    type=str,
+    default="100ms",
+    desc="The update frequency used when resizing a window continuously",
+)
+mod.setting(
     "win_hide_move_gui",
     type=int,
     default=0,
     desc="When enabled, the 'Move/Resize Window' GUI will not be shown for continuous move operations.",
 )
-setting_win_hide_resize_gui = mod.setting(
+mod.setting(
     "win_hide_resize_gui",
     type=int,
     default=0,
     desc="When enabled, the 'Move/Resize Window' GUI will not be shown for continuous resize operations.",
 )
 
-# taken from https: // talon.wiki/unofficial_talon_docs/#captures
+# taken from https: //talon.wiki/unofficial_talon_docs/#captures
 @mod.capture(rule="all | ((north | south) [(east | west)] | east | west)")
 def compass_direction(m) -> Direction:
     """
@@ -87,23 +92,20 @@ def compass_direction(m) -> Direction:
     print(f'{result=}')
     return result
 
-# WIP - open on target window screen
-@imgui.open(x=700, y=0)
+@imgui.open(y=0)
 def gui_win_stop(gui: imgui.GUI):
-    gui.text("Mode: {}".format(continuous_mode))
+    gui.text(f"Say 'win stop' or click below.")
     gui.line()
     if gui.button("Stop moving/resizing"):
         actions.user.win_stop()
 
 def win_move_continuous_helper():
-    #global move_width_increment, move_height_increment
     # print("win_move_continuous_helper")
     if move_width_increment or move_height_increment:
         w = ui.active_window()
         _win_move_pixels_relative(w, move_width_increment, move_height_increment, continuous_direction)
 
 def win_resize_continuous_helper():
-    #global resize_width_increment, resize_height_increment
     # print("win_resize_continuous_helper")
     if resize_width_increment or resize_height_increment:
         w = ui.active_window()
@@ -111,34 +113,29 @@ def win_resize_continuous_helper():
               
 def start_move():
     global move_job
-    move_job = cron.interval(setting_win_continuous_frequency.get(), win_move_continuous_helper)
+    move_job = cron.interval(settings.get('win_move_frequency'), win_move_continuous_helper)
 
 def start_resize():
     global resize_job
-    resize_job = cron.interval(setting_win_continuous_frequency.get(), win_resize_continuous_helper)
+    resize_job = cron.interval(settings.get('win_resize_frequency'), win_resize_continuous_helper)
 
 def _win_move_continuous(w: ui.Window, multiplier: int, direction: Direction) -> None:
-    global continuous_mode, move_width_increment, move_height_increment, continuous_direction, continuous_old_rect
-
-    # WIP - do we need continuous_mode?
-    continuous_mode = "win move"
+    global move_width_increment, move_height_increment, continuous_direction, continuous_old_rect
 
     continuous_direction = direction
 
     continuous_old_rect = w.rect
     
-    move_width_increment, move_height_increment = _get_component_distances_by_percent(w, setting_win_continuous_move_increment.get(), direction)
+    move_width_increment, move_height_increment = _get_component_distances_by_percent(w, settings.get('win_continuous_move_increment'), direction)
     
     if move_job is None:
         start_move()
 
-    if setting_win_hide_move_gui.get() == 0:
+    if settings.get('win_hide_move_gui') == 0:
         gui_win_stop.show()
 
 def _win_resize_continuous(w: ui.Window, multiplier: int, direction: Optional[Direction] = None) -> None:
-    global continuous_mode, resize_width_increment, resize_height_increment, continuous_direction, continuous_old_rect
-
-    continuous_mode = "win resize"
+    global resize_width_increment, resize_height_increment, continuous_direction, continuous_old_rect
 
     continuous_direction = direction
 
@@ -151,11 +148,11 @@ def _win_resize_continuous(w: ui.Window, multiplier: int, direction: Optional[Di
     if resize_job is None:
         start_resize()
 
-    if setting_win_hide_resize_gui.get() == 0:
+    if settings.get('win_hide_resize_gui') == 0:
         gui_win_stop.show()
 
 def _stop_win():
-    global move_width_increment, move_height_increment, resize_width_increment, resize_height_increment, move_job, resize_job, continuous_mode, continuous_direction
+    global move_width_increment, move_height_increment, resize_width_increment, resize_height_increment, move_job, resize_job, continuous_direction
     global last_window, continuous_old_rect
     
     if move_job:
@@ -176,7 +173,6 @@ def _stop_win():
     resize_height_increment = 0
     move_job = None
     resize_job = None
-    continuous_mode = ""
     continuous_direction = None
     continuous_old_rect = None
 
@@ -467,17 +463,72 @@ def _move_direction_check(direction: Direction) -> bool:
         return False
     return True
 
-# WIP - need to find proper formatting for this display
-# WIP - how to position this window on the current screen? (below doesn't work)
-@imgui.open(x=(ui.active_window().screen.x + 700), y=(ui.active_window().screen.y + 0))
+@imgui.open(y=0)
 def _show_win(gui: imgui.GUI) -> None:
     w = ui.active_window()
-    gui.text(f"Window {w.id}: {w.rect=}")
+    
+    gui.text(f"== Window ==")
+
+    gui.text(f"Id: {w.id}")
+    gui.spacer()
+
+    x = w.rect.x
+    y = w.rect.y
+    width = w.rect.width
+    height = w.rect.height
+    
+    gui.text(f"Top Left: {x, y}")
+    gui.text(f"Top Right: {x + width, y}")
+    gui.text(f"Bottom Left: {x, y + height}")
+    gui.text(f"Bottom Right: {x + width, y + height}")
+    gui.text(f"Center: {x + width//2, y + height//2}")
+    gui.spacer()
+
+    gui.text(f"Width: {width}")
+    gui.text(f"Height: {height}")
+    
+    gui.line()
+    
     screen = w.screen
-    gui.text(f"Screen: {screen.rect=}, {screen.visible_rect=}, {screen.scale=}")
+    gui.text(f"== Screen ==")
+    gui.spacer()
+    
+    #gui.text(f"Name: {screen.name}")
+    #gui.text(f"DPI: {screen.dpi}")
+    #gui.text(f"Scale: {screen.scale}")
+    #gui.spacer()
+
+    x = int(screen.visible_rect.x)
+    y = int(screen.visible_rect.y)
+    width = int(screen.visible_rect.width)
+    height = int(screen.visible_rect.height)
+
+    gui.text(f"__Visible Rectangle__")
+    gui.text(f"Top Left: {x, y}")
+    gui.text(f"Top Right: {x + width, y}")
+    gui.text(f"Bottom Left: {x, y + height}")
+    gui.text(f"Bottom Right: {x + width, y + height}")
+    gui.text(f"Center: {x + width//2, y + height//2}")
+    gui.spacer()
+
+    x = int(screen.rect.x)
+    y = int(screen.rect.y)
+    width = int(screen.rect.width)
+    height = int(screen.rect.height)
+
+    gui.text(f"__Physical Rectangle__")
+    gui.text(f"Top Left: {x, y}")
+    gui.text(f"Top Right: {x + width, y}")
+    gui.text(f"Bottom Left: {x, y + height}")
+    gui.text(f"Bottom Right: {x + width, y + height}")
+    gui.text(f"Center: {x + width//2, y + height//2}")
+
     gui.line()
+    
     gui.text(f"Say 'win hide' to close this window.")
+
     gui.line()
+    
     if gui.button("Close"):
         _show_win.hide()
 

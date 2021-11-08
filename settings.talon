@@ -50,5 +50,23 @@ settings():
     # per-application basis.
     # user.context_sensitive_dictation = 1
 
+    # The percent increment used when moving a window continuously
+    user.win_continuous_move_increment = 2
+
+    # The update frequency used when moving a window continuously
+    user.win_continuous_move_increment = "100ms"
+
+    # When enabled, the 'Move/Resize Window' GUI will not be shown for continuous move operations
+    user.win_hide_move_gui = 0
+
+    # The percent increment used when resizing a window continuously
+    user.win_continuous_resize_increment = 2
+         
+    # The update frequency used when resizing a window continuously
+    user.win_continuous_resize_increment = "100ms"
+
+    # When enabled, the 'Move/Resize Window' GUI will not be shown for continuous resize operations
+    user.win_hide_resize_gui = 0
+
 # uncomment tag to enable mouse grid
 # tag(): user.mouse_grid_enabled
