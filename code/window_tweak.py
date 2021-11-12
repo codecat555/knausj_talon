@@ -11,7 +11,7 @@ import math
 import queue
 import logging
 import sys
-from talon import ui, Module, actions, speech_system, ctrl, imgui, cron, settings
+from talon import ui, Module, actions, speech_system, ctrl, imgui, cron, settings, app
 from talon.debug import log_exception
 
 Direction = Dict[str, bool]
@@ -28,6 +28,10 @@ move_job = None
 resize_job = None
 continuous_direction = None
 continuous_old_rect = None
+
+# user notification definitions
+center_move_not_valid_title = 'Talon - Cannot move all directions at once'
+center_move_not_valid_body = 'The "center" direction is not valid for move operations.'
 
 mod = Module()
 
@@ -189,33 +193,70 @@ def _win_stop() -> None:
 
     _win_stop_gui.hide()
 
-def _win_move_pixels_relative(w: ui.Window, delta_width: int, delta_height: int, direction: Direction) -> None:
-       # start with the current values
-        new_x = w.rect.x
-        new_y = w.rect.y
+def _clip_to_screen(w, x: int, y: int, width: int, height: int) -> Tuple[int, int]:
+    screen = w.screen
+    screen_x = int(screen.visible_rect.x)
+    screen_y = int(screen.visible_rect.y)
+    screen_width = int(screen.visible_rect.width)
+    screen_height = int(screen.visible_rect.height)
 
+    new_x = x
+    new_y = y
+    if x < screen_x:
+        new_x = screen_x
+    elif x > screen_x + screen_width - width:
+        new_x = screen_x + screen_width - width
+
+    if y < screen_y:
+        new_y = screen_y
+    elif y > screen_y + screen_height - height:
+        new_y = screen_y + screen_height - height
+        
+    return new_x, new_y
+    
+def _win_move_pixels_relative(w: ui.Window, delta_x: int, delta_y: int, direction: Direction) -> None:
+        global move_width_increment, move_height_increment
+
+        # start with the current values
+        x = w.rect.x
+        y = w.rect.y
+        
         # apply changes as indicated
         if direction["left"]:
-            new_x -= delta_width          
+            x -= delta_x
         elif direction["right"]:
-            new_x += delta_width
-        #          
+            x += delta_x
+        #
         if direction["up"]:
-            new_y -= delta_height
+            y -= delta_y
         elif direction["down"]:
-            new_y += delta_height
+            y += delta_y
 
-        if testing:
-            print(f'_win_move_pixels_relative: before: {w.rect=}')
-            #print(f'_win_move_pixels_relative: {new_x, new_y, w.rect.width, w.rect.height}')
-            
+        new_x, new_y = _clip_to_screen(w, x, y, w.rect.width, w.rect.height)
+        #new_x, new_y = x, y
+        print(f'_win_move_pixels_relative: {x=},  {y=}, {new_x=}, {new_y=}')
+        #
+        if new_x != x:
+            # done moving horizontally
+            move_width_increment = 0
+        #
+        if new_y != y:
+            # done moving vertically
+            move_height_increment = 0
+
+        # if testing:
+        #     print(f'_win_move_pixels_relative: before: {w.rect=}')
+        #     #print(f'_win_move_pixels_relative: {new_x=}, {new_y=}')
+
         # make it so
         _win_set_rect(w, ui.Rect(new_x, new_y, w.rect.width, w.rect.height))
 
-        if testing:
-            print(f'_win_move_pixels_relative: after: {w.rect=}')
+        # if testing:
+        #     print(f'_win_move_pixels_relative: after: {w.rect=}')
 
- 
+        if move_width_increment == 0 and move_height_increment == 0:
+            # stop when there's nothing left to do
+            actions.user.win_stop()
 
 def _get_diagonal_length(w: ui.Window) -> int:
     return math.sqrt(((w.rect.width - w.rect.x) ** 2) + ((w.rect.height - w.rect.y) ** 2))
@@ -426,13 +467,14 @@ def _win_set_rect(w: ui.Window, rect_in: ui.Rect) -> None:
         #         print(f'_win_set_rect: {rect_in=}')
         #     logging.warning('_win_set_rect: after update, window size does not exactly match request')
 
+    finally:
         # remember old rectangle
         global last_window
         last_window = {
             'id': w.id,
             'rect': old_rect
         }
-    finally:
+        
         ui.unregister('win_move',   on_update)
         ui.unregister('win_resize', on_update)
 
@@ -548,7 +590,10 @@ speech_system.register("phrase", _on_phrase)
 def _move_direction_check(direction: Direction) -> bool:
     direction_count = sum(direction.values())
     if direction_count == 4:
-        logging.warning('The "center" direction is not valid for move operations.')
+        app.notify(
+            title=center_move_not_valid_title,
+            body=center_move_not_valid_body
+        )
         return False
     return True
 
