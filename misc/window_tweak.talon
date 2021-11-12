@@ -23,10 +23,16 @@ win move <user.compass_direction> <number_signed> pixels:
 win move <number_signed> at <number_signed>:
     user.win_move_absolute(number_signed_1, number_signed_2)
 
+# For this command, compass_direction indicates which part of the window
+# should be moved to the given coordinate. Northwest means the top left
+# corner, east means the midpoint of the right-hand edge - like that.
 win move <user.compass_direction> <number_signed> at <number_signed>:
     user.win_move_absolute(number_signed_1, number_signed_2, compass_direction)
 
-win stretch [<user.compass_direction>]$:
+win stretch$:
+    user.win_stretch()
+
+win stretch <user.compass_direction>$:
     user.win_stretch(compass_direction)
 
 win stretch <user.compass_direction> <number> percent:
@@ -35,9 +41,12 @@ win stretch <user.compass_direction> <number> percent:
 win stretch <user.compass_direction> <number> pixels:
     user.win_resize_pixels(number, compass_direction)
 
-win shrink [<user.compass_direction>]$:
+win shrink$:
+    user.win_shrink()
+
+win shrink <user.compass_direction>$:
     user.win_shrink(compass_direction)
-    
+
 win shrink <user.compass_direction> <number> percent:
     user.win_resize_percent(-1 * number, compass_direction)
     
