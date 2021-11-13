@@ -11,6 +11,7 @@ import math
 import queue
 import logging
 import sys
+
 from talon import ui, Module, actions, speech_system, ctrl, imgui, cron, settings, app
 from talon.debug import log_exception
 
@@ -134,9 +135,6 @@ def _win_resize_continuous_helper() -> None:
         # keep history
         resize_history.append(value)
 
-        # WIP - for debug
-        #actions.user.win_stop()
-
 def _start_move() -> None:
     global move_job
     move_job = cron.interval(settings.get('user.win_move_frequency'), _win_move_continuous_helper)
@@ -155,8 +153,6 @@ def _win_move_continuous(w: ui.Window, direction: Direction) -> None:
     continuous_old_rect = w.rect
 
     move_width_increment, move_height_increment = _get_component_dimensions_by_percent(w, settings.get('user.win_continuous_move_increment'), direction)
-#    move_width_increment, move_height_increment = _get_component_dimensions(w, settings.get('user.win_continuous_move_increment'), direction)
-    #move_width_increment = move_height_increment = 1
 
     if move_job is None:
         _start_move()
@@ -234,30 +230,6 @@ def _clip_to_screen_for_move(w, x: int, y: int, width: int, height: int) -> Tupl
         new_y = screen_y + screen_height - height
         
     return new_x, new_y
-    
-# def _clip_to_screen_for_resize(w, x: int, y: int, width: int, height: int) -> Tuple[int, int, int, int]:
-#     screen = w.screen
-#     screen_x = int(screen.visible_rect.x)
-#     screen_y = int(screen.visible_rect.y)
-#     screen_width = int(screen.visible_rect.width)
-#     screen_height = int(screen.visible_rect.height)
-
-#     new_x = x
-#     new_y = y
-#     new_width = width
-#     new_height = height
-
-#     if x < screen_x:
-#         new_x = screen_x
-#     elif x > screen_x + screen_width - width:
-#         new_x = screen_x + screen_width - width
-
-#     if y < screen_y:
-#         new_y = screen_y
-#     elif y > screen_y + screen_height - height:
-#         new_y = screen_y + screen_height - height
-        
-#     return new_x, new_y, new_width, new_height
 
 def _win_move_pixels_relative(w: ui.Window, delta_x: int, delta_y: int, direction: Direction) -> None:
         global move_width_increment, move_height_increment
@@ -278,7 +250,7 @@ def _win_move_pixels_relative(w: ui.Window, delta_x: int, delta_y: int, directio
             y += delta_y
 
         new_x, new_y = _clip_to_screen_for_move(w, x, y, w.rect.width, w.rect.height)
-        #new_x, new_y = x, y
+        
         # print(f'_win_move_pixels_relative: {x=},  {y=}, {new_x=}, {new_y=}')
         #
         if new_x != x:
@@ -506,11 +478,10 @@ def _win_set_rect(w: ui.Window, rect_in: ui.Rect) -> None:
         # results are not guaranteed, warn if the request could not be fulfilled exactly
         if (rect_in.x, rect_in.y) != (w.rect.x, w.rect.y):
             logging.warning('after update, window position does not exactly match request')
-        # WIP - disable for now
-        # if (rect_in.width, rect_in.height) != (w.rect.width, w.rect.height):
-        #     if testing:
-        #         print(f'_win_set_rect: {rect_in=}')
-        #     logging.warning('_win_set_rect: after update, window size does not exactly match request')
+        if (rect_in.width, rect_in.height) != (w.rect.width, w.rect.height):
+            if testing:
+                print(f'_win_set_rect: {rect_in=}')
+            logging.warning('_win_set_rect: after update, window size does not exactly match request')
 
     finally:
         # remember old rectangle
@@ -531,7 +502,6 @@ def _clip_left(w: ui.Window, x: int, width: int) -> Tuple[int, int]:
         # print(f'_clip_left: left clipping')
 
         # update width before updating new_x
-        # new_width = new_width - (screen_x - new_x)
         width = width - (x - screen_x)
         x = screen_x
 
@@ -547,12 +517,10 @@ def _clip_up(w: ui.Window, y: int, height: int) -> Tuple[int, int]:
     screen_height = int(w.screen.visible_rect.height)
 
     # clip to screen
-    # print(f'_clip_up: up clipping')
-
-    # clip to screen
     if y < screen_y:
+        # print(f'_clip_up: up clipping')
+        
         # update height before updating y
-        #height = height - y - screen_y
         height = height - (screen_y - y)
         y = screen_y
 
@@ -567,12 +535,11 @@ def _clip_right(w: ui.Window, x: int, width: int) -> Tuple[int, int]:
     screen_x = int(w.screen.visible_rect.x)
     screen_width = int(w.screen.visible_rect.width)
 
-    # clip to screen
-    # print(f'_clip_right: right clipping')
-    
     if x + width > screen_x + screen_width:
+        # print(f'_clip_right: right clipping')
+        
         width = screen_x + screen_width - x
-        # width = width - (screen_x + screen_width - x)
+
         # done changing horizontally
         resize_width_increment = 0
 
@@ -584,12 +551,10 @@ def _clip_down(w: ui.Window, y: int, height: int) -> Tuple[int, int]:
     screen_y = int(w.screen.visible_rect.y)
     screen_height = int(w.screen.visible_rect.height)
 
-    # clip to screen
-    # print(f'_clip_down: down clipping')
-
     if y + height > screen_y + screen_height:
+        # print(f'_clip_down: down clipping')
+
         height = screen_y + screen_height - y
-        # height = height - (screen_y + screen_height - y)
 
         # done changing vertically
         resize_height_increment = 0
@@ -730,17 +695,6 @@ def _win_resize_pixels_relative(w: ui.Window, delta_width: int, delta_height: in
 
         #print(f'_win_resize_pixels_relative: from center')
 
-    #new_x, new_y, new_width, new_height = _clip_to_screen_for_resize(w, x, y, width, height)
-    #new_x, new_y, new_width, new_height = x, y, width, height
-
-    # if new_x != x:
-    #     # done moving horizontally
-    #     resize_width_increment = 0
-    #     #
-    # if new_y != y:
-    #     # done moving vertically
-    #     resize_height_increment = 0
-
     # verbose, but useful sometimes
     # if testing:
     #     print(f'_win_resize_pixels_relative: before: {w.rect=}')
@@ -877,7 +831,7 @@ class Actions:
     def win_move(direction: Optional[Direction] = None) -> None:
         "Move window in small increments in the given direction, until stopped"
 
-# WIP - why not just let 'win move center' just go to the center of the screen?
+        # WIP - why not just let 'win move center' just go toward the center of the screen?
         if not _move_direction_check(direction):
             return
 
