@@ -110,7 +110,6 @@ def _win_move_continuous_helper() -> None:
     if move_width_increment or move_height_increment:
         w = ui.active_window()
         _win_move_pixels_relative(w, move_width_increment, move_height_increment, continuous_direction)
-        save_history
 
 def _win_resize_continuous_helper() -> None:
     global resize_history
@@ -187,17 +186,16 @@ def _win_stop() -> None:
     global move_width_increment, move_height_increment, resize_width_increment, resize_height_increment, move_job, resize_job
     global last_window, continuous_direction, continuous_old_rect
 
+    if not move_job and not resize_job:
+        if testing:
+            print('_win_stop: no jobs to stop (may have stopped automatically via clipping logic)')
+        return
+
     if move_job:
         cron.cancel(move_job)
 
     if resize_job:
         cron.cancel(resize_job)
-
-    # remember starting rectangle
-    last_window = {
-        'id': ui.active_window().id,
-        'rect': continuous_old_rect
-    }
 
     move_width_increment = 0
     move_height_increment = 0
@@ -206,7 +204,17 @@ def _win_stop() -> None:
     move_job = None
     resize_job = None
     continuous_direction = None
-    continuous_old_rect = None
+
+    #actions.sleep('100ms')
+
+    if continuous_old_rect:
+        # remember starting rectangle
+        print(f'_win_stop: {continuous_old_rect=}')
+        last_window = {
+            'id': ui.active_window().id,
+            'rect': continuous_old_rect
+        }
+        continuous_old_rect = None
 
     _win_stop_gui.hide()
 
@@ -486,6 +494,7 @@ def _win_set_rect(w: ui.Window, rect_in: ui.Rect) -> None:
     finally:
         # remember old rectangle
         global last_window
+        #print(f'_win_set_rect: {old_rect=}')
         last_window = {
             'id': w.id,
             'rect': old_rect
@@ -983,5 +992,5 @@ class Actions:
 
         if last_window and last_window['id'] == w.id:
             if testing:
-                print(f'win_revert: reverting size and/or position for window {w.id}: {w.rect}')
+                print(f'win_revert: reverting size and/or position for {last_window}')
             _win_set_rect(w, last_window['rect'])
