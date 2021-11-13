@@ -28,6 +28,7 @@ move_job = None
 resize_job = None
 continuous_direction = None
 continuous_old_rect = None
+resize_history = []
 
 # user notification definitions
 center_move_not_valid_title = 'Talon - Cannot move all directions at once'
@@ -108,12 +109,30 @@ def _win_move_continuous_helper() -> None:
     if move_width_increment or move_height_increment:
         w = ui.active_window()
         _win_move_pixels_relative(w, move_width_increment, move_height_increment, continuous_direction)
+        save_history
 
 def _win_resize_continuous_helper() -> None:
+    global resize_history
+
     # print("win_resize_continuous_helper")
     if resize_width_increment or resize_height_increment:
         w = ui.active_window()
         _win_resize_pixels_relative(w, resize_width_increment, resize_height_increment, continuous_direction)
+
+        value = (w.rect.width, w.rect.height)
+        if len(resize_history) == 2:
+            if value == resize_history[0] == resize_history[1]:
+                # window size has stopped changing...so quit trying
+                if testing:
+                    print('window size has stopped changing, quitting...')
+                actions.user.win_stop()
+                resize_history = []
+            else:
+                # chuck old data to make room for new data
+                resize_history.pop(0)
+        #
+        # keep history
+        resize_history.append(value)
 
         # WIP - for debug
         #actions.user.win_stop()
@@ -123,7 +142,9 @@ def _start_move() -> None:
     move_job = cron.interval(settings.get('user.win_move_frequency'), _win_move_continuous_helper)
 
 def _start_resize() -> None:
-    global resize_job
+    global resize_job, reresize_historyy
+
+    resize_history = []
     resize_job = cron.interval(settings.get('user.win_resize_frequency'), _win_resize_continuous_helper)
 
 def _win_move_continuous(w: ui.Window, direction: Direction) -> None:
@@ -258,7 +279,7 @@ def _win_move_pixels_relative(w: ui.Window, delta_x: int, delta_y: int, directio
 
         new_x, new_y = _clip_to_screen_for_move(w, x, y, w.rect.width, w.rect.height)
         #new_x, new_y = x, y
-        print(f'_win_move_pixels_relative: {x=},  {y=}, {new_x=}, {new_y=}')
+        # print(f'_win_move_pixels_relative: {x=},  {y=}, {new_x=}, {new_y=}')
         #
         if new_x != x:
             # done moving horizontally
@@ -507,7 +528,7 @@ def _clip_left(w: ui.Window, x: int, width: int) -> Tuple[int, int]:
     screen_x = int(w.screen.visible_rect.x)
     # clip to screen
     if x < screen_x:
-        print(f'_clip_left: left clipping')
+        # print(f'_clip_left: left clipping')
 
         # update width before updating new_x
         # new_width = new_width - (screen_x - new_x)
@@ -526,7 +547,7 @@ def _clip_up(w: ui.Window, y: int, height: int) -> Tuple[int, int]:
     screen_height = int(w.screen.visible_rect.height)
 
     # clip to screen
-    print(f'_clip_up: up clipping')
+    # print(f'_clip_up: up clipping')
 
     # clip to screen
     if y < screen_y:
@@ -547,7 +568,7 @@ def _clip_right(w: ui.Window, x: int, width: int) -> Tuple[int, int]:
     screen_width = int(w.screen.visible_rect.width)
 
     # clip to screen
-    print(f'_clip_right: right clipping')
+    # print(f'_clip_right: right clipping')
     
     if x + width > screen_x + screen_width:
         width = screen_x + screen_width - x
@@ -564,7 +585,7 @@ def _clip_down(w: ui.Window, y: int, height: int) -> Tuple[int, int]:
     screen_height = int(w.screen.visible_rect.height)
 
     # clip to screen
-    print(f'_clip_down: down clipping')
+    # print(f'_clip_down: down clipping')
 
     if y + height > screen_y + screen_height:
         height = screen_y + screen_height - y
@@ -594,13 +615,13 @@ def _win_resize_pixels_relative(w: ui.Window, delta_width: int, delta_height: in
             temp = direction["right"]
             direction["right"] = direction["left"]
             direction["left"] = temp
-            print(f'_win_resize_pixels_relative: swapped left and right')
+            # print(f'_win_resize_pixels_relative: swapped left and right')
         #
         if delta_height < 0:
             temp = direction["up"]
             direction["up"] = direction["down"]
             direction["down"] = temp
-            print(f'_win_resize_pixels_relative: swapped up and down')
+            # print(f'_win_resize_pixels_relative: swapped up and down')
 
     screen = w.screen
     screen_x = int(screen.visible_rect.x)
@@ -613,7 +634,7 @@ def _win_resize_pixels_relative(w: ui.Window, delta_width: int, delta_height: in
     #print(f'_win_resize_pixels_relative: {direction_count=}')
 
     if direction_count == 1:    # horizontal or vertical
-        print(f'_win_resize_pixels_relative: single direction (horizontal or vertical)')
+        # print(f'_win_resize_pixels_relative: single direction (horizontal or vertical)')
         # apply changes as indicated
         if direction["left"]:
             new_x -= delta_width
@@ -734,7 +755,7 @@ def _win_resize_pixels_relative(w: ui.Window, delta_width: int, delta_height: in
     if resize_width_increment == 0 and resize_height_increment == 0:
         # stop when there's nothing left to do
         actions.user.win_stop()
-        print(f'_win_resize_pixels_relative: stopped')
+        # print(f'_win_resize_pixels_relative: stopped')
 
 # phrase management code lifted from history.py
 def _parse_phrase(word_list: List) -> None:
