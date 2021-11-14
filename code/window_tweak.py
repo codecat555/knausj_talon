@@ -122,8 +122,10 @@ def _win_move_continuous_helper() -> None:
         w = ui.active_window()
         _win_move_pixels_relative(w, move_width_increment, move_height_increment, continuous_direction)
     else:
-        # WIP - why not just call stop here?
-        pass
+        # move increments are both zero, nothing to do...so stop
+        if testing:
+            print('_win_move_continuous_helper: window move is complete')
+        actions.user.win_stop()
 
 def _win_resize_continuous_helper() -> None:
     global resize_history
@@ -138,7 +140,7 @@ def _win_resize_continuous_helper() -> None:
             if value == resize_history[0] == resize_history[1]:
                 # window size has stopped changing...so quit trying
                 if testing:
-                    print('window size has stopped changing, quitting...')
+                    print('_win_resize_continuous_helper: window size has stopped changing, quitting...')
                 actions.user.win_stop()
                 resize_history = []
             else:
@@ -148,8 +150,11 @@ def _win_resize_continuous_helper() -> None:
         # keep history
         resize_history.append(value)
     else:
-        # WIP - why not just call stop here?
-        pass
+        # resize increments are both zero, nothing to do...so stop
+        if testing:
+            print('_win_resize_continuous_helper: window resize is complete')
+        actions.user.win_stop()
+        resize_history
 
 def _start_move() -> None:
     global move_job
@@ -164,7 +169,7 @@ def _start_resize() -> None:
 def _win_move_continuous(w: ui.Window, direction: Direction) -> None:
     global move_width_increment, move_height_increment, continuous_direction, continuous_old_rect
 
-    if not move_job is None:
+    if move_job:
         logging.warning('cannot start a move job when one is already running')
         return
 
@@ -186,7 +191,7 @@ def _win_resize_continuous(w: ui.Window, multiplier: int, direction: Optional[Di
         print(f'_win_resize_continuous: starting resize - {resize_width_increment=}, {resize_height_increment=}, {continuous_direction=}, {multiplier=}')
 
     # WIP - TOUTOC issue here with resize_job, use mutex?
-    if not resize_job is None:
+    if resize_job:
         logging.warning('cannot start a resize job when one is already running')
         return
 
@@ -301,11 +306,6 @@ def _win_move_pixels_relative(w: ui.Window, delta_x: int, delta_y: int, directio
 
         # if testing:
         #     print(f'_win_move_pixels_relative: after: {w.rect=}')
-
-        # WIP - maybe do this in _win_move_continuous_helper()?
-        if move_width_increment == 0 and move_height_increment == 0:
-            # stop when there's nothing left to do
-            actions.user.win_stop()
 
 def _get_diagonal_length(w: ui.Window) -> int:
     return math.sqrt(((w.rect.width - w.rect.x) ** 2) + ((w.rect.height - w.rect.y) ** 2))
@@ -495,9 +495,9 @@ def _win_set_rect(w: ui.Window, rect_in: ui.Rect) -> None:
         #raise queue.Empty()
         #raise Exception('just testing')
 
-        q.get(timeout=0.3)
+        q.get(timeout=0.1)
         if event_count == 2:
-            q.get(timeout=0.3)
+            q.get(timeout=0.1)
 
     except queue.Empty:
         logging.warning('_win_set_rect: timed out waiting for window update')
@@ -746,12 +746,6 @@ def _win_resize_pixels_relative(w: ui.Window, delta_width: int, delta_height: in
     # verbose, but useful sometimes
     # if testing:
     #     print(f'_win_resize_pixels_relative: after: {w.rect=}')
-
-    # WIP - maybe do this in _win_resize_continuous_helper()?
-    if resize_width_increment == 0 and resize_height_increment == 0:
-        # stop when there's nothing left to do
-        actions.user.win_stop()
-        # print(f'_win_resize_pixels_relative: stopped')
 
 def _move_direction_check(direction: Direction) -> bool:
     direction_count = sum(direction.values())
