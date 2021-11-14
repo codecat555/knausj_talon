@@ -417,12 +417,6 @@ def _translate_top_left_by_region_for_resize(w: ui.Window, target_width: int, ta
             # adjust y to account for half the change in height
             y = y - delta_height // 2
 
-        elif direction["right"]:
-            # we are stretching east, so the x coordinate must not change for the western corners, i.e. top left
-
-            # adjust y to account for half the change in height
-            y = y - delta_height // 2
-
         elif direction["up"]:
             # stretching north, y coordinate must not change for the southern corners,
             # adjust x to account for half the change in width
@@ -430,6 +424,12 @@ def _translate_top_left_by_region_for_resize(w: ui.Window, target_width: int, ta
 
             # adjust y to account for the entire change in height
             y = y - delta_height
+
+        elif direction["right"]:
+            # we are stretching east, so the x coordinate must not change for the western corners, i.e. top left
+
+            # adjust y to account for half the change in height
+            y = y - delta_height // 2
 
         elif direction["down"]:
             # stretching south, y coordinate must not change for the northern corners, i.e. top left
@@ -643,25 +643,25 @@ def _win_resize_pixels_relative(w: ui.Window, delta_width: int, delta_height: in
         # print(f'_win_resize_pixels_relative: single direction (horizontal or vertical)')
         # apply changes as indicated
         if direction["left"]:
-            new_x -= delta_width
+            new_x = new_x - delta_width
             new_x, new_width = _clip_left_for_resize(w, new_x, new_width)
         #
         if direction["up"]:
-            new_y -= delta_height
+            new_y = new_y - delta_height
             new_y, new_height = _clip_up_for_resize(w, new_y, new_height)
         #
         if direction["right"]:
             new_x, new_width = _clip_right_for_resize(w, new_x, new_width)
         #
         if direction["down"]:
-            new_height += delta_height
+            new_height = new_height + delta_height
             new_y, new_height = _clip_down_for_resize(w, new_y, new_height)
 
     elif direction_count == 2:    # stretch diagonally
         if direction["left"] and direction["up"]:
             # we are stretching northwest so the coordinates must not change for the southeastern corner
-            new_x -= delta_width
-            new_y -= delta_height
+            new_x = new_x - delta_width
+            new_y = new_y - delta_height
 
             new_x, new_width = _clip_left_for_resize(w, new_x, new_width)
             new_y, new_height = _clip_up_for_resize(w, new_y, new_height)
@@ -672,7 +672,7 @@ def _win_resize_pixels_relative(w: ui.Window, delta_width: int, delta_height: in
             # we are stretching northeast so the coordinates must not change for the southwestern corner
 
             # adjust y to account for the entire change in height
-            new_y -= delta_height
+            new_y = new_y - delta_height
 
             new_x, new_width = _clip_right_for_resize(w, new_x, new_width)
             new_y, new_height = _clip_up_for_resize(w, new_y, new_height)
@@ -690,7 +690,7 @@ def _win_resize_pixels_relative(w: ui.Window, delta_width: int, delta_height: in
         elif direction["left"] and direction["down"]:
             # we are stretching southwest so the coordinates must not change for the northeastern corner,
             # adjust x to account for the entire change in width
-            new_x -= delta_width
+            new_x = new_x - delta_width
 
             new_x, new_width = _clip_left_for_resize(w, new_x, new_width)
             new_y, new_height = _clip_down_for_resize(w, new_y, new_height)            
@@ -698,8 +698,8 @@ def _win_resize_pixels_relative(w: ui.Window, delta_width: int, delta_height: in
             #print(f'_win_resize_pixels_relative: left and down')
 
     elif direction_count == 4:    # stretch from center
-        new_x -= delta_width // 2
-        new_y -= delta_height // 2
+        new_x = new_x - delta_width // 2
+        new_y = new_y - delta_height // 2
 
         # WIP - this is clunky, but works...clean it up later
         save_width = resize_width_increment
