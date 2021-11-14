@@ -4,9 +4,9 @@ Tools for managing window size and position.
 Continuous move/resize machinery adapted from mouse.py.
 """
 
-# WIP - modify clipping to support multiple screens
 # WIP - use a mod or scope to disable all voice commands during a
 # WIP - continuous move/resize operation...except 'win stop', etc.
+
 # WIP - refactor into classes, move globals into class or instance variables
 
 from typing import Dict, List, Tuple, Optional
@@ -40,6 +40,11 @@ continuous_old_rect = None
 # use window size history to detect when the window stops shrinking during resize,
 # i.e. the minimum size has been reached and the resize operation should stop.
 resize_history = []
+#
+resize_left_limit_reached = False
+resize_up_limit_reached = False
+resize_right_limit_reached = False
+resize_down_limit_reached = False
 
 # user notification definitions
 # WIP - why not just let 'win move center' move toward the center of the screen?
@@ -142,7 +147,6 @@ def _win_resize_continuous_helper() -> None:
                 if testing:
                     print('_win_resize_continuous_helper: window size has stopped changing, quitting...')
                 actions.user.win_stop()
-                resize_history = []
             else:
                 # chuck old data to make room for new data
                 resize_history.pop(0)
@@ -154,16 +158,34 @@ def _win_resize_continuous_helper() -> None:
         if testing:
             print('_win_resize_continuous_helper: window resize is complete')
         actions.user.win_stop()
-        resize_history
+
+def _reset_continuous_flags() -> None:
+    global move_width_increment, move_height_increment, resize_width_increment, resize_height_increment, move_job, move_job, resize_job
+    global continuous_direction, continuous_old_rect, resize_history, resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached
+    
+    # globals used by the continuous move/resize commands
+    move_width_increment = 0
+    move_height_increment = 0
+    resize_width_increment = 0
+    resize_height_increment = 0
+    move_job = None
+    resize_job = None
+    continuous_direction = None
+    continuous_old_rect = None
+    resize_history = []
+    resize_left_limit_reached = False
+    resize_up_limit_reached = False
+    resize_right_limit_reached = False
+    resize_down_limit_reached = False
 
 def _start_move() -> None:
     global move_job
+    
     move_job = cron.interval(settings.get('user.win_move_frequency'), _win_move_continuous_helper)
 
 def _start_resize() -> None:
-    global resize_job, reresize_historyy
-
-    resize_history = []
+    global resize_job
+    
     resize_job = cron.interval(settings.get('user.win_resize_frequency'), _win_resize_continuous_helper)
 
 def _win_move_continuous(w: ui.Window, direction: Direction) -> None:
@@ -173,6 +195,8 @@ def _win_move_continuous(w: ui.Window, direction: Direction) -> None:
         logging.warning('cannot start a move job when one is already running')
         return
 
+    _reset_continuous_flags()
+    
     continuous_direction = direction
 
     continuous_old_rect = w.rect
@@ -190,13 +214,17 @@ def _win_resize_continuous(w: ui.Window, multiplier: int, direction: Optional[Di
     if testing:
         print(f'_win_resize_continuous: starting resize - {resize_width_increment=}, {resize_height_increment=}, {continuous_direction=}, {multiplier=}')
 
-    # WIP - TOUTOC issue here with resize_job, use mutex?
+    # TOUTOC issue here with resize_job. presumably not a problem
+    # with current usage, but we could use a mutex...
     if resize_job:
         logging.warning('cannot start a resize job when one is already running')
         return
 
+    _reset_continuous_flags()
+    
     resize_width_increment, resize_height_increment = \
         _get_component_dimensions_by_percent(w, settings.get('user.win_continuous_resize_increment'), direction)
+
     # apply multiplier to control whether we're stretching or shrinking
     resize_width_increment *= multiplier
     resize_height_increment *= multiplier
@@ -225,14 +253,6 @@ def _win_stop() -> None:
     if resize_job:
         cron.cancel(resize_job)
 
-    move_width_increment = 0
-    move_height_increment = 0
-    resize_width_increment = 0
-    resize_height_increment = 0
-    move_job = None
-    resize_job = None
-    continuous_direction = None
-
     #actions.sleep('100ms')
 
     if continuous_old_rect:
@@ -244,6 +264,8 @@ def _win_stop() -> None:
         }
         continuous_old_rect = None
 
+    _reset_continuous_flags()
+    
     _win_stop_gui.hide()
 
 def _clip_to_screen_for_move(w, x: int, y: int, width: int, height: int) -> Tuple[int, int]:
@@ -535,7 +557,7 @@ def _win_set_rect(w: ui.Window, rect_in: ui.Rect) -> None:
         ui.unregister('win_resize', on_update)
 
 def _clip_left_for_resize(w: ui.Window, x: int, width: int) -> Tuple[int, int]:
-    global resize_width_increment
+    global resize_left_limit_reached
 
     screen_x = int(w.screen.visible_rect.x)
     
@@ -547,13 +569,14 @@ def _clip_left_for_resize(w: ui.Window, x: int, width: int) -> Tuple[int, int]:
         width = width - (x - screen_x)
         x = screen_x
 
-        # # done changing horizontally
-        resize_width_increment = 0
+        resize_left_limit_reached = True
+
+        print(f'_clip_left_for_resize: {resize_left_limit_reached=}')
 
     return x, width
 
 def _clip_up_for_resize(w: ui.Window, y: int, height: int) -> Tuple[int, int]:
-    global resize_height_increment
+    global resize_up_limit_reached
 
     screen_y = int(w.screen.visible_rect.y)
 
@@ -565,13 +588,14 @@ def _clip_up_for_resize(w: ui.Window, y: int, height: int) -> Tuple[int, int]:
         height = height - (screen_y - y)
         y = screen_y
 
-        # # done changing vertically
-        resize_height_increment = 0
+        resize_up_limit_reached = True
+        
+        print(f'_clip_up_for_resize: {resize_up_limit_reached=}')
 
     return y, height
 
 def _clip_right_for_resize(w: ui.Window, x: int, width: int) -> Tuple[int, int]:
-    global resize_width_increment
+    global resize_right_limit_reached
 
     screen_x = int(w.screen.visible_rect.x)
     screen_width = int(w.screen.visible_rect.width)
@@ -581,13 +605,14 @@ def _clip_right_for_resize(w: ui.Window, x: int, width: int) -> Tuple[int, int]:
         
         width = screen_x + screen_width - x
 
-        # done changing horizontally
-        resize_width_increment = 0
+        resize_right_limit_reached = True
+
+        print(f'_clip_right_for_resize: {resize_right_limit_reached=}')
 
     return x, width
 
 def _clip_down_for_resize(w: ui.Window, y: int, height: int) -> Tuple[int, int]:
-    global resize_height_increment
+    global resize_down_limit_reached
 
     screen_y = int(w.screen.visible_rect.y)
     screen_height = int(w.screen.visible_rect.height)
@@ -597,8 +622,9 @@ def _clip_down_for_resize(w: ui.Window, y: int, height: int) -> Tuple[int, int]:
 
         height = screen_y + screen_height - y
 
-        # done changing vertically
-        resize_height_increment = 0
+        resize_down_limit_reached = True
+        
+        print(f'_clip_down_for_resize: {resize_down_limit_reached=}')
 
     return y, height
     
@@ -657,6 +683,11 @@ def _win_resize_pixels_relative(w: ui.Window, delta_width: int, delta_height: in
             new_height = new_height + delta_height
             new_y, new_height = _clip_down_for_resize(w, new_y, new_height)
 
+        if any([resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached]):
+            print(f'_win_resize_pixels_relative: single direction limit reached')
+            resize_width_increment = 0
+            resize_height_increment = 0
+
     elif direction_count == 2:    # stretch diagonally
         if direction["left"] and direction["up"]:
             # we are stretching northwest so the coordinates must not change for the southeastern corner
@@ -697,42 +728,37 @@ def _win_resize_pixels_relative(w: ui.Window, delta_width: int, delta_height: in
 
             #print(f'_win_resize_pixels_relative: left and down')
 
+        if resize_left_limit_reached or resize_right_limit_reached:
+            print(f'_win_resize_pixels_relative: horizontal limit reached')
+            resize_width_increment = 0
+        #
+        if resize_up_limit_reached or resize_down_limit_reached:
+            print(f'_win_resize_pixels_relative: vertical limit reached')
+            resize_height_increment = 0
+
     elif direction_count == 4:    # stretch from center
         new_x = new_x - delta_width // 2
         new_y = new_y - delta_height // 2
 
-        # WIP - this is clunky, but works...clean it up later
-        save_width = resize_width_increment
-        save_height = resize_height_increment
-
-        horizontal_limit_reached = 0
-        vertical_limit_reached = 0
-        #
         new_x, new_width = _clip_left_for_resize(w, new_x, new_width)
-        if (new_x, new_width) != (x, width):
-        # if new_x != x:
-            horizontal_limit_reached += 1
-        #
+        
         new_y, new_height = _clip_up_for_resize(w, new_y, new_height)
-        if (new_y, new_height) != (y, height):
-        # if new_y != y:
-            vertical_limit_reached += 1
             
         new_x, new_width = _clip_right_for_resize(w, new_x, new_width)
-        # if (new_x, new_width) != (x, width):
-        if new_width != width:
-            horizontal_limit_reached += 1
 
         new_y, new_height = _clip_down_for_resize(w, new_y, new_height)
-        # if (new_y, new_height) != (y, height):
-        if new_height != height:
-            vertical_limit_reached += 1
-
-        if new_x != screen_x or new_x + new_width != screen_x + screen_width:
-            resize_width_increment = save_width
-
-        if new_y != screen_y or new_y + new_height != screen_y + screen_height:
-            resize_height_increment = save_height
+        
+        if resize_left_limit_reached and resize_right_limit_reached:
+            if testing:
+                print(f'_win_resize_pixels_relative: horizontal limit reached')
+                
+            resize_width_increment = 0
+        
+        if resize_up_limit_reached and resize_down_limit_reached:
+            if testing:
+                print(f'_win_resize_pixels_relative: vertical limit reached')
+                
+            resize_height_increment = 0
 
         #print(f'_win_resize_pixels_relative: from center')
 
