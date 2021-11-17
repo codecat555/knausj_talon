@@ -68,5 +68,11 @@ settings():
     # When enabled, the 'Move/Resize Window' GUI will not be shown for continuous resize operations
     user.win_hide_resize_gui = 0
 
+    # How long to wait (in seconds) for talon to signal completion of window move/resize requests
+    user.win_set_queue_timeout = 0.2
+
+    # How many times to retry a timed out talon window move/resize request 
+    user.win_set_retries = 1
+
 # uncomment tag to enable mouse grid
 # tag(): user.mouse_grid_enabled
