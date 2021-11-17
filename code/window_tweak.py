@@ -36,6 +36,7 @@ move_job = None
 resize_job = None
 continuous_direction = None
 continuous_old_rect = None
+continuous_mutex = threading.Lock()
 
 mod = Module()
 
@@ -130,7 +131,7 @@ def _win_move_continuous_helper() -> None:
         print(f'win_move_continuous_helper: current thread = {threading.get_native_id()}')
         
     w = ui.active_window()
-    if move_width_increment or move_height_increment:
+    if round(move_width_increment) or round(move_height_increment):
         result, horizontal_limit_reached, vertical_limit_reached = _win_move_pixels_relative(w, move_width_increment, move_height_increment, continuous_direction)
         if not result or (horizontal_limit_reached and vertical_limit_reached):
             if testing:
@@ -158,7 +159,7 @@ def _win_resize_continuous_helper() -> None:
         return
 
     # print("win_resize_continuous_helper")
-    if resize_width_increment or resize_height_increment:
+    if round(resize_width_increment) or round(resize_height_increment):
         w = ui.active_window()
         result, resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached = _win_resize_pixels_relative(w, resize_width_increment, resize_height_increment, continuous_direction)
         if not result:
@@ -223,9 +224,13 @@ def _start_resize() -> None:
 
 def _win_move_continuous(w: ui.Window, direction: Direction) -> None:
     global move_width_increment, move_height_increment, continuous_direction, continuous_old_rect
+    global continuous_mutex
+
+    continuous_mutex.acquire()
 
     if move_job:
         logging.warning('cannot start a move job when one is already running')
+        continuous_mutex.release()
         return
 
     _reset_continuous_flags()
@@ -243,16 +248,20 @@ def _win_move_continuous(w: ui.Window, direction: Direction) -> None:
     if settings.get('user.win_hide_move_gui') == 0:
         _win_stop_gui.show()
 
+    continuous_mutex.release()
+
 def _win_resize_continuous(w: ui.Window, multiplier: int, direction: Optional[Direction] = None) -> None:
     global resize_width_increment, resize_height_increment, continuous_direction, continuous_old_rect
+    global continuous_mutex
+
+    continuous_mutex.acquire()
 
     if testing:
         print(f'_win_resize_continuous: starting resize - {resize_width_increment=}, {resize_height_increment=}, {continuous_direction=}, {multiplier=}')
 
-    # TOUTOC issue here with resize_job. presumably not a problem
-    # with current usage, but we could use a mutex...
     if resize_job:
         logging.warning('cannot start a resize job when one is already running')
+        continuous_mutex.release()
         return
 
     _reset_continuous_flags()
@@ -273,8 +282,8 @@ def _win_resize_continuous(w: ui.Window, multiplier: int, direction: Optional[Di
     if settings.get('user.win_hide_resize_gui') == 0:
         _win_stop_gui.show()
 
-continuous_mutex = threading.Lock()
-
+    continuous_mutex.release()
+    
 def _win_stop() -> None:
     global continuous_mutex
     global move_width_increment, move_height_increment, resize_width_increment, resize_height_increment, move_job, resize_job
@@ -313,10 +322,10 @@ def _win_stop() -> None:
 
 def _clip_to_screen_for_move(w, x: int, y: int, width: int, height: int) -> Tuple[int, int]:
     screen = w.screen
-    screen_x = int(screen.visible_rect.x)
-    screen_y = int(screen.visible_rect.y)
-    screen_width = int(screen.visible_rect.width)
-    screen_height = int(screen.visible_rect.height)
+    screen_x = screen.visible_rect.x
+    screen_y = screen.visible_rect.y
+    screen_width = screen.visible_rect.width
+    screen_height = screen.visible_rect.height
 
     new_x = x
     new_y = y
@@ -350,7 +359,7 @@ def _win_move_pixels_relative(w: ui.Window, delta_x: int, delta_y: int, directio
             new_x = x + delta_x
             new_y = y + delta_y
 
-            new_window_center = Point2d(new_x + window_width//2, new_y + window_height//2)
+            new_window_center = Point2d(round(new_x + window_width/2), round(new_y + window_height/2))
 
             window_center = w.rect.center
 
@@ -359,8 +368,8 @@ def _win_move_pixels_relative(w: ui.Window, delta_x: int, delta_y: int, directio
 
             # print(f'_win_move_pixels_relative: {new_x=}, {new_y=}, {screen_center.x=}, {screen_center.y=}')
 
-            max_x = screen_center.x - window_width//2
-            max_y = screen_center.y - window_height//2
+            max_x = screen_center.x - window_width/2
+            max_y = screen_center.y - window_height/2
             print(f'_win_move_pixels_relative: {max_x=}, {max_y=}')
 
             if (delta_x != 0) and ((x <= max_x and new_x >= max_x) or (x >= max_x and new_x <= max_x)):
@@ -406,7 +415,7 @@ def _win_move_pixels_relative(w: ui.Window, delta_x: int, delta_y: int, directio
         #     #print(f'_win_move_pixels_relative: {new_x=}, {new_y=}')
 
         # make it so
-        result = _win_set_rect(w, ui.Rect(new_x, new_y, w.rect.width, w.rect.height))
+        result = _win_set_rect(w, ui.Rect(round(new_x), round(new_y), round(w.rect.width), round(w.rect.height)))
 
         # if testing:
         #     print(f'_win_move_pixels_relative: after: {w.rect=}')
@@ -439,7 +448,7 @@ def _get_center_to_center_rect(w: ui.Window) -> ui.Rect:
     height = abs(window_center.y - screen_center.y)
     vertical_multiplier = 1 if window_center.y <= screen_center.y else -1
 
-    center_to_center_rect = ui.Rect(screen_center.x, window_center.y, width, height)
+    center_to_center_rect = ui.Rect(round(screen_center.x), round(window_center.y), round(width), round(height))
     print(f'_get_center_to_center_rect: returning {center_to_center_rect=}, {horizontal_multiplier=}, {vertical_multiplier=}')
 
     return center_to_center_rect, horizontal_multiplier, vertical_multiplier
@@ -464,24 +473,24 @@ def _get_component_dimensions(w: ui.Window, distance: int, direction: Direction,
 
         print(f"_get_component_dimensions: {magnitude=}, {new_x=}, {new_y=}\n")
         
-        delta_width = round(abs(new_x - window_center.x) * horizontal_multiplier)
-        delta_height = round(abs(new_y - window_center.y) * vertical_multiplier)
+        delta_width = abs(new_x - window_center.x) * horizontal_multiplier
+        delta_height = abs(new_y - window_center.y) * vertical_multiplier
 
         x_steps = 0
         if delta_width != 0:
-            x_steps = rect.width//delta_width
+            x_steps = rect.width/delta_width
         print(f"_get_component_dimensions: x steps={x_steps}")
             
         y_steps = 0
         if delta_height != 0:
-            y_steps = rect.height//delta_height
+            y_steps = rect.height/delta_height
         print(f"_get_component_dimensions: y steps={y_steps}")            
     else:
         if direction_count > 1:    # diagonal
             magnitude = _get_diagonal_length(rect)
             ratio = distance / magnitude
-            delta_width = round(rect.width * ratio)
-            delta_height = round(rect.height * ratio)
+            delta_width = rect.width * ratio
+            delta_height = rect.height * ratio
         else:  # horizontal or vertical
             if direction["left"] or direction["right"]:
                 delta_width = distance
@@ -504,12 +513,12 @@ def _get_component_dimensions_by_percent(w: ui.Window, percent: int, direction: 
     
     if direction_count  > 1:    # diagonal
         diagonal_length = _get_diagonal_length(rect)
-        distance = round(diagonal_length * (percent/100))
+        distance = diagonal_length * (percent/100)
     else:  # horizontal or vertical
         if direction["left"] or direction["right"]:
-            distance = round(rect.width * (percent/100))
+            distance = rect.width * (percent/100)
         elif direction["up"] or direction["down"]:
-            distance =  round(rect.height * (percent/100))
+            distance =  rect.height * (percent/100)
 
     return _get_component_dimensions(w, distance, direction, operation)
 
@@ -527,17 +536,17 @@ def _translate_top_left_by_region_for_move(w: ui.Window, target_x: int, target_y
     direction_count = sum(region_in.values())
     if direction_count == 1:
         if region_in["left"]:
-            target_y = target_y - height // 2
+            target_y = target_y - height / 2
 
         elif region_in["right"]:
             target_x = target_x - width
-            target_y = target_y - height // 2
+            target_y = target_y - height / 2
 
         elif region_in["up"]:
-            target_x = target_x - width // 2
+            target_x = target_x - width / 2
 
         elif region_in["down"]:
-            target_x = target_x - width // 2
+            target_x = target_x - width / 2
             target_y = target_y - height
 
     elif direction_count == 2:
@@ -556,8 +565,8 @@ def _translate_top_left_by_region_for_move(w: ui.Window, target_x: int, target_y
             target_y = target_y - height
 
     elif direction_count == 4:
-        target_x = target_x - width // 2
-        target_y = target_y - height // 2
+        target_x = target_x - width / 2
+        target_y = target_y - height / 2
 
     if testing:
         print(f"_translate_top_left_by_region_for_move: translated position: {target_x=}, {target_y=}, {width=}, {height=}\n")
@@ -583,12 +592,12 @@ def _translate_top_left_by_region_for_resize(w: ui.Window, target_width: int, ta
             x = x - delta_width
 
             # adjust y to account for half the change in height
-            y = y - delta_height // 2
+            y = y - delta_height / 2
 
         elif direction["up"]:
             # stretching north, y coordinate must not change for the southern corners,
             # adjust x to account for half the change in width
-            x = x - delta_width // 2
+            x = x - delta_width / 2
 
             # adjust y to account for the entire change in height
             y = y - delta_height
@@ -597,13 +606,13 @@ def _translate_top_left_by_region_for_resize(w: ui.Window, target_width: int, ta
             # we are stretching east, so the x coordinate must not change for the western corners, i.e. top left
 
             # adjust y to account for half the change in height
-            y = y - delta_height // 2
+            y = y - delta_height / 2
 
         elif direction["down"]:
             # stretching south, y coordinate must not change for the northern corners, i.e. top left
 
             # adjust x to account for half the change in width
-            x = x - delta_width // 2
+            x = x - delta_width / 2
 
     elif direction_count == 2:
         if direction["left"] and direction["up"]:
@@ -627,8 +636,8 @@ def _translate_top_left_by_region_for_resize(w: ui.Window, target_width: int, ta
             x = x - delta_width
 
     elif direction_count == 4:
-        x = x - delta_width // 2
-        y = y - delta_height // 2
+        x = x - delta_width / 2
+        y = y - delta_height / 2
 
     if testing:
         print(f"_translate_top_left_by_region_for_resize: translated position: {x=}, {y=}, {target_width=}, {target_height=}\n")
@@ -642,7 +651,7 @@ def _win_set_rect(w: ui.Window, rect_in: ui.Rect) -> bool:
     retries = settings.get('user.win_set_retries')
     queue_timeout = settings.get('user.win_set_queue_timeout')
 
-    # adapted from https: // talonvoice.slack.com/archives/C9MHQ4AGP/p1635971780355900
+    # adapted from https://talonvoice.slack.com/archives/C9MHQ4AGP/p1635971780355900
     q = queue.Queue()
     def on_move(event_win: ui.Window) -> None:
         if event_win == w and w.rect != old_rect:
@@ -727,7 +736,7 @@ def _win_set_rect(w: ui.Window, rect_in: ui.Rect) -> bool:
 def _clip_left_for_resize(w: ui.Window, x: int, width: int) -> Tuple[int, int, bool]:
     resize_left_limit_reached = False
 
-    screen_x = int(w.screen.visible_rect.x)
+    screen_x = w.screen.visible_rect.x
     
     # clip to screen
     if x < screen_x:
@@ -746,7 +755,7 @@ def _clip_left_for_resize(w: ui.Window, x: int, width: int) -> Tuple[int, int, b
 def _clip_up_for_resize(w: ui.Window, y: int, height: int) -> Tuple[int, int, bool]:
     resize_up_limit_reached = False
 
-    screen_y = int(w.screen.visible_rect.y)
+    screen_y = w.screen.visible_rect.y
 
     # clip to screen
     if y < screen_y:
@@ -765,8 +774,8 @@ def _clip_up_for_resize(w: ui.Window, y: int, height: int) -> Tuple[int, int, bo
 def _clip_right_for_resize(w: ui.Window, x: int, width: int) -> Tuple[int, int, bool]:
     resize_right_limit_reached = False
 
-    screen_x = int(w.screen.visible_rect.x)
-    screen_width = int(w.screen.visible_rect.width)
+    screen_x = w.screen.visible_rect.x
+    screen_width = w.screen.visible_rect.width
 
     if x + width > screen_x + screen_width:
         # print(f'_clip_right: right clipping')
@@ -782,8 +791,8 @@ def _clip_right_for_resize(w: ui.Window, x: int, width: int) -> Tuple[int, int, 
 def _clip_down_for_resize(w: ui.Window, y: int, height: int) -> Tuple[int, int, bool]:
     resize_down_limit_reached = False
 
-    screen_y = int(w.screen.visible_rect.y)
-    screen_height = int(w.screen.visible_rect.height)
+    screen_y = w.screen.visible_rect.y
+    screen_height = w.screen.visible_rect.height
 
     if y + height > screen_y + screen_height:
         # print(f'_clip_down: down clipping')
@@ -822,12 +831,6 @@ def _win_resize_pixels_relative(w: ui.Window, delta_width: int, delta_height: in
             direction["up"] = direction["down"]
             direction["down"] = temp
             # print(f'_win_resize_pixels_relative: swapped up and down')
-
-    screen = w.screen
-    screen_x = int(screen.visible_rect.x)
-    screen_y = int(screen.visible_rect.y)
-    screen_width = int(screen.visible_rect.width)
-    screen_height = int(screen.visible_rect.height)
 
     # are we moving diagonally?
     direction_count = sum(direction.values())
@@ -892,8 +895,8 @@ def _win_resize_pixels_relative(w: ui.Window, delta_width: int, delta_height: in
             #print(f'_win_resize_pixels_relative: left and down')
 
     elif direction_count == 4:    # stretch from center
-        new_x = new_x - delta_width // 2
-        new_y = new_y - delta_height // 2
+        new_x = new_x - delta_width / 2
+        new_y = new_y - delta_height / 2
 
         new_x, new_width, resize_left_limit_reached = _clip_left_for_resize(w, new_x, new_width)
         
@@ -910,7 +913,7 @@ def _win_resize_pixels_relative(w: ui.Window, delta_width: int, delta_height: in
     #     print(f'_win_resize_pixels_relative: before: {w.rect=}')
 
     # make it so
-    result = _win_set_rect(w, ui.Rect(new_x, new_y, new_width, new_height))
+    result = _win_set_rect(w, ui.Rect(round(new_x), round(new_y), round(new_width), round(new_height)))
 
     # verbose, but useful sometimes
     # if testing:
@@ -936,7 +939,6 @@ def _win_show(gui: imgui.GUI) -> None:
     gui.text(f"Top Right: {x + width, y}")
     gui.text(f"Bottom Left: {x, y + height}")
     gui.text(f"Bottom Right: {x + width, y + height}")
-    # WIP - should be rounding values off for display?
     gui.text(f"Center: {w.rect.center.x, w.rect.center.y}")
     gui.spacer()
 
@@ -954,10 +956,10 @@ def _win_show(gui: imgui.GUI) -> None:
     #gui.text(f"Scale: {screen.scale}")
     #gui.spacer()
 
-    x = int(screen.visible_rect.x)
-    y = int(screen.visible_rect.y)
-    width = int(screen.visible_rect.width)
-    height = int(screen.visible_rect.height)
+    x = screen.visible_rect.x
+    y = screen.visible_rect.y
+    width = screen.visible_rect.width
+    height = screen.visible_rect.height
 
     gui.text(f"__Visible Rectangle__")
     gui.text(f"Top Left: {x, y}")
@@ -972,10 +974,10 @@ def _win_show(gui: imgui.GUI) -> None:
     
     gui.spacer()
 
-    x = int(screen.rect.x)
-    y = int(screen.rect.y)
-    width = int(screen.rect.width)
-    height = int(screen.rect.height)
+    x = screen.rect.x
+    y = screen.rect.y
+    width = screen.rect.width
+    height = screen.rect.height
 
     gui.text(f"__Physical Rectangle__")
     gui.text(f"Top Left: {x, y}")
@@ -1030,7 +1032,7 @@ class Actions:
             if testing:
                 print(f'win_move_absolute: translated top left position: {x,y}\n')
 
-        _win_set_rect(w, ui.Rect(x, y, w.rect.width, w.rect.height))
+        _win_set_rect(w, ui.Rect(round(x), round(y), round(w.rect.width), round(w.rect.height)))
 
         if testing:
             print(f'win_move_absolute: {w.rect=}\n\n')
@@ -1083,7 +1085,7 @@ class Actions:
             if testing:
                 print(f'win_resize_absolute: translated top left position: {x,y}\n')
 
-        _win_set_rect(w, ui.Rect(x, y, target_width, target_height))
+        _win_set_rect(w, ui.Rect(round(x), round(y), round(target_width), round(target_height)))
 
         if testing:
             print(f'win_resize_absolute: {w.rect=}\n\n')
