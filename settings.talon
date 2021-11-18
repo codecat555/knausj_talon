@@ -54,7 +54,10 @@ settings():
     user.win_continuous_move_increment = 1
 
     # The update frequency used when moving a window continuously
-    user.win_move_frequency = "40ms"
+    user.win_move_frequency = "30ms"
+
+    # The target speed, in cm/sec, for continuous move operations
+    user.win_continuous_move_rate = 4.0
 
     # When enabled, the 'Move/Resize Window' GUI will not be shown for continuous move operations
     user.win_hide_move_gui = 0
@@ -63,7 +66,10 @@ settings():
     user.win_continuous_resize_increment = 1
          
     # The update frequency used when resizing a window continuously
-    user.win_resize_frequency = "40ms"
+    user.win_resize_frequency = "30ms"
+
+    # The target speed, in cm/sec, for continuous resize operations
+    user.win_continuous_resize_rate = 4.0
 
     # When enabled, the 'Move/Resize Window' GUI will not be shown for continuous resize operations
     user.win_hide_resize_gui = 0

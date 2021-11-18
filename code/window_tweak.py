@@ -65,6 +65,18 @@ mod.setting(
     desc="The update frequency used when resizing a window continuously",
 )
 mod.setting(
+    "win_continuous_move_rate",
+    type=float,
+    default=1.0,
+    desc="The target speed, in cm/sec, for continuous move operations",
+)
+mod.setting(
+    "win_continuous_resize_rate",
+    type=float,
+    default=1.0,
+    desc="The target speed, in cm/sec, for continuous resize operations",
+)
+mod.setting(
     "win_hide_move_gui",
     type=int,
     default=0,
@@ -127,8 +139,8 @@ def _win_move_continuous_helper() -> None:
         # seems sometimes this gets called while the job is being canceled, so just return that case
         return
     
-    if testing:
-        print(f'win_move_continuous_helper: current thread = {threading.get_native_id()}')
+    # if testing:
+    #     print(f'win_move_continuous_helper: current thread = {threading.get_native_id()}')
         
     w = ui.active_window()
     if round(move_width_increment) or round(move_height_increment):
@@ -239,7 +251,7 @@ def _win_move_continuous(w: ui.Window, direction: Direction) -> None:
 
     continuous_old_rect = w.rect
 
-    move_width_increment, move_height_increment = _get_component_dimensions_by_percent(w, settings.get('user.win_continuous_move_increment'), direction, 'move')
+    move_width_increment, move_height_increment = _get_continuous_parameters(w, settings.get('user.win_continuous_move_rate'), direction, 'move')
 
     print(f'_win_move_continuous: {move_width_increment=}, {move_height_increment=}')
 
@@ -266,8 +278,7 @@ def _win_resize_continuous(w: ui.Window, multiplier: int, direction: Optional[Di
 
     _reset_continuous_flags()
     
-    resize_width_increment, resize_height_increment = \
-        _get_component_dimensions_by_percent(w, settings.get('user.win_continuous_resize_increment'), direction, 'resize')
+    resize_width_increment, resize_height_increment = _get_continuous_parameters(w, settings.get('user.win_continuous_resize_rate'), direction, '_resize')
 
     # apply multiplier to control whether we're stretching or shrinking
     resize_width_increment *= multiplier
@@ -426,7 +437,7 @@ def _win_move_pixels_relative(w: ui.Window, delta_x: int, delta_y: int, directio
                 delta_y = w.rect.y - old_rect.y
                 delta_width = w.rect.width - old_rect.width
                 delta_height = w.rect.height - old_rect.height
-                print(f'_win_move_pixels_relative: change: {delta_x=}, {delta_y=}, {delta_width=}, {delta_height=}')
+                # print(f'_win_move_pixels_relative: change: {delta_x=}, {delta_y=}, {delta_width=}, {delta_height=}')
 
         return result, horizontal_limit_reached, vertical_limit_reached
 
@@ -458,6 +469,8 @@ def _get_component_dimensions(w: ui.Window, distance: int, direction: Direction,
     rect = w.rect
     direction_count = sum(direction.values())
     if operation == 'move' and direction_count == 4:    # move to center
+        # this is a special case - 'move center' - we return signed values from this code
+
         rect, horizontal_multiplier, vertical_multiplier = _get_center_to_center_rect(w)
         magnitude = _get_diagonal_length(rect)
 
@@ -521,6 +534,53 @@ def _get_component_dimensions_by_percent(w: ui.Window, percent: int, direction: 
             distance =  rect.height * (percent/100)
 
     return _get_component_dimensions(w, distance, direction, operation)
+    
+def _get_continuous_parameters(w: ui.Window, rate_cps: float, direction: Direction, operation: str) -> Tuple[int, int]:
+    if testing:
+        print(f'_get_continuous_move_parameters: {rate_cps=}')
+
+    # convert rate to inches to match dpi measure
+    rate_ips = rate_cps / 2.54
+    
+    dpi_x = w.screen.dpi_x
+    dpi_y = w.screen.dpi_y
+
+    # calculate dots per millisecond
+    dpms_x = (rate_ips * dpi_x) / 1000
+    dpms_y = (rate_ips * dpi_y) / 1000
+
+    move_frequency = float((settings.get('user.win_move_frequency'))[:-2])
+
+    move_width_increment = move_height_increment = 0
+
+    direction_count = sum(direction.values())
+    if operation == 'move' and direction_count == 4:    # move to center
+        if testing:
+            print(f"_get_continuous_parameters: 'move center' special case")
+
+        move_width_increment = dpms_x * move_frequency
+        move_height_increment = dpms_y * move_frequency
+
+        # special case, return signed values
+        if w.rect.center.x > w.screen.rect.center.x:
+            move_width_increment *= -1
+        #
+        if w.rect.center.y > w.screen.rect.center.y:
+            move_height_increment *= -1
+    elif direction_count > 1:    # move to center
+        move_width_increment = dpms_x * move_frequency
+        move_height_increment = dpms_y * move_frequency
+    else:
+        # single direction
+        if direction["left"] or direction["right"]:
+            move_width_increment = dpms_x * move_frequency
+        elif direction["up"] or direction["down"]:
+            move_height_increment = dpms_y * move_frequency
+
+    if testing:
+        print(f"_get_continuous_parameters: returning {move_width_increment=}, {move_height_increment=}")
+
+    return move_width_increment, move_height_increment
 
 # note: this method is used by win_move_absolute(), which interprets the Direction
 # argument differently than elsewhere in this module.
@@ -939,6 +999,7 @@ def _win_show(gui: imgui.GUI) -> None:
     gui.text(f"Top Right: {x + width, y}")
     gui.text(f"Bottom Left: {x, y + height}")
     gui.text(f"Bottom Right: {x + width, y + height}")
+    # gui.text(f"Center: {round(w.rect.center.x), round(w.rect.center.y)}")
     gui.text(f"Center: {w.rect.center.x, w.rect.center.y}")
     gui.spacer()
 
@@ -966,6 +1027,7 @@ def _win_show(gui: imgui.GUI) -> None:
     gui.text(f"Top Right: {x + width, y}")
     gui.text(f"Bottom Left: {x, y + height}")
     gui.text(f"Bottom Right: {x + width, y + height}")
+    # gui.text(f"Center: {round(screen.visible_rect.center.x), round(screen.visible_rect.center.y)}")
     gui.text(f"Center: {screen.visible_rect.center.x, screen.visible_rect.center.y}")
     gui.spacer()
     
@@ -984,6 +1046,7 @@ def _win_show(gui: imgui.GUI) -> None:
     gui.text(f"Top Right: {x + width, y}")
     gui.text(f"Bottom Left: {x, y + height}")
     gui.text(f"Bottom Right: {x + width, y + height}")
+    # gui.text(f"Center: {round(screen.rect.center.x), round(screen.rect.center.y)}")
     gui.text(f"Center: {screen.rect.center.x, screen.rect.center.y}")
     gui.spacer()
 
