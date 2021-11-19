@@ -3,7 +3,8 @@ Tools for managing window size and position.
 
 Continuous move/resize machinery adapted from mouse.py.
 """
-
+# WIP - 'win stretch forty percent' - what should this do (if anything)?
+# WIP - move 'win stop' action to separate file, enabled by tag
 # WIP - refactor into classes, move globals into class or instance variables
 
 from typing import Dict, List, Tuple, Optional
@@ -40,18 +41,6 @@ continuous_mutex = threading.RLock()
 
 mod = Module()
 
-mod.setting(
-    "win_continuous_move_increment",
-    type=int,
-    default=1,
-    desc="The percent increment used when moving a window continuously",
-)
-mod.setting(
-    "win_continuous_resize_increment",
-    type=int,
-    default=1,
-    desc="The percent increment used when resizing a window continuously",
-)
 mod.setting(
     "win_move_frequency",
     type=str,
@@ -99,6 +88,13 @@ mod.setting(
     type=int,
     default=1,
     desc="How many times to retry a timed out talon window move/resize request.",
+)
+mod.setting(
+    "win_verbose_warnings",
+    type=bool,
+    default=False,
+    # window move and resize requests are not guaranteed
+    desc="Whether to generate a warning when the result of a window move or resize request does not exactly match the request.",
 )
 
 # taken from https: //talon.wiki/unofficial_talon_docs/#captures
@@ -178,12 +174,17 @@ def _win_resize_continuous_helper() -> None:
         if round(resize_width_increment) or round(resize_height_increment):
             w = ui.active_window()
             result, resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached = _win_resize_pixels_relative(w, resize_width_increment, resize_height_increment, continuous_direction)
-            if not result:
-                if testing:
-                    print('_win_resize_continuous_helper: window has stopped changing size')
-                _win_stop()
-                return
 
+            # this can happen if a stop operation is in process when cron calls this method. in that case,
+            # we can just return.
+            if not continuous_direction:
+                if resize_job:
+                    if settings.get('user.win_verbose_warnings') != 0:
+                        # I don't ever expect to see this, that's why it's here
+                        logging.warning('_win_resize_continuous_helper: found null continuous_direction while a resize job is running...')
+                # hakuna matata
+                return
+ 
             direction_count = sum(continuous_direction.values())
             if direction_count == 1:    # horizontal or vertical
                 if any([resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached]):
@@ -213,20 +214,26 @@ def _win_resize_continuous_helper() -> None:
             if testing:
                 print('_win_resize_continuous_helper: window resize is complete')
             _win_stop()
+        
+        # for testing
+        one_loop_only = False
+        if one_loop_only:
+            _win_stop()
 
 def _reset_continuous_flags() -> None:
     global move_width_increment, move_height_increment, resize_width_increment, resize_height_increment, move_job, move_job, resize_job
     global continuous_direction, continuous_old_rect
 
-    # globals used by the continuous move/resize commands
-    move_width_increment = 0
-    move_height_increment = 0
-    resize_width_increment = 0
-    resize_height_increment = 0
-    move_job = None
-    resize_job = None
-    continuous_direction = None
-    continuous_old_rect = None
+    with continuous_mutex:
+        # globals used by the continuous move/resize commands
+        move_width_increment = 0
+        move_height_increment = 0
+        resize_width_increment = 0
+        resize_height_increment = 0
+        move_job = None
+        resize_job = None
+        continuous_direction = None
+        continuous_old_rect = None
 
 def _start_move() -> None:
     global move_job
@@ -267,13 +274,9 @@ def _win_resize_continuous(w: ui.Window, multiplier: int, direction: Optional[Di
     global continuous_mutex
 
     with continuous_mutex:
-        if testing:
-            print(f'_win_resize_continuous: starting resize - {resize_width_increment=}, {resize_height_increment=}, {continuous_direction=}, {multiplier=}')
-
         if resize_job:
             logging.warning('cannot start a resize job when one is already running')
             return
-
 
         resize_width_increment, resize_height_increment = _get_continuous_parameters(w, settings.get('user.win_continuous_resize_rate'), direction, '_resize')
 
@@ -284,6 +287,9 @@ def _win_resize_continuous(w: ui.Window, multiplier: int, direction: Optional[Di
         continuous_direction = direction
 
         continuous_old_rect = w.rect
+
+        if testing:
+            print(f'_win_resize_continuous: starting resize - {resize_width_increment=}, {resize_height_increment=}, {continuous_direction=}, {multiplier=}')
 
         _start_resize()
 
@@ -447,103 +453,6 @@ def _win_move_pixels_relative(w: ui.Window, delta_x: int, delta_y: int, directio
 
         return result, horizontal_limit_reached, vertical_limit_reached
         
-# def _win_move_pixels_relative_old(w: ui.Window, delta_x: int, delta_y: int, direction: Direction) -> Tuple[bool, bool, bool]:
-#         result = horizontal_limit_reached = vertical_limit_reached = False
-
-#         # start with the current values
-#         x = w.rect.x
-#         y = w.rect.y
-
-#         print(f'_win_move_pixels_relative: {delta_x=}, {delta_y=}, {x=}, {y=}')
-
-#         # apply changes as indicated
-#         direction_count = sum(direction.values())
-#         if direction_count == 4:    # move to center
-#             window_width = w.rect.width
-#             window_height = w.rect.height
-
-#             new_x = x + delta_x
-#             new_y = y + delta_y
-
-#             new_window_center = Point2d(round(new_x + window_width/2), round(new_y + window_height/2))
-
-#             window_center = w.rect.center
-
-#             screen = w.screen
-#             screen_center = screen.visible_rect.center
-
-#             print(f'_win_move_pixels_relative: {new_x=}, {new_y=}, {screen_center.x=}, {screen_center.y=}')
-
-#             max_x = screen_center.x - window_width/2
-#             max_y = screen_center.y - window_height/2
-#             print(f'_win_move_pixels_relative: {max_x=}, {max_y=}')
-
-#             if (delta_x != 0) and ((x <= max_x and new_x >= max_x) or (x >= max_x and new_x <= max_x)):
-#                 # crossed center point, done moving horizontally
-#                 if testing:
-#                     print(f'_win_move_pixels_relative: crossed horizontal center point')
-#                 new_x = max_x
-#                 horizontal_limit_reached = True
-
-#             # if (delta_y != 0) and ((y <= max_y and new_y >= max_y) or (y >= max_y and new_y <= max_y)):
-#             if delta_y != 0:
-#                 if y <= new_y:
-#                     if (y <= max_y and new_y >= max_y):
-#                         pass
-#                 else:
-#                     if (y >= max_y and new_y <= max_y):
-#                         pass
-# # WIP WIP WIP 
-#                 # crossed center point, done moving vertically
-#                 if testing:
-#                     print(f'_win_move_pixels_relative: crossed vertical center point')
-#                 new_y = max_y
-#                 vertical_limit_reached = True
-#         else:
-#             if direction["left"]:
-#                 x -= delta_x
-
-#             if direction["right"]:
-#                 x += delta_x
-#             #
-#             if direction["up"]:
-#                 y -= delta_y
-
-#             if direction["down"]:
-#                 y += delta_y
-
-#             new_x, new_y = _clip_to_screen_for_move(w, x, y, w.rect.width, w.rect.height)
-
-#             # print(f'_win_move_pixels_relative: {x=},  {y=}, {new_x=}, {new_y=}')s
-#             #
-#             if new_x != x:
-#                 # done moving horizontally
-#                 horizontal_limit_reached = True
-#             #
-#             if new_y != y:
-#                 # done moving vertically
-#                 vertical_limit_reached = True
-
-#         # if testing:
-#         #     print(f'_win_move_pixels_relative: before: {w.rect=}')
-#         #     #print(f'_win_move_pixels_relative: {new_x=}, {new_y=}')
-
-#         # make it so
-#         result = _win_set_rect(w, ui.Rect(round(new_x), round(new_y), round(w.rect.width), round(w.rect.height)))
-
-#         # if testing:
-#         #     print(f'_win_move_pixels_relative: after: {w.rect=}')
-#         if testing:
-#             if 'rect' in last_window:
-#                 old_rect = last_window["rect"]
-#                 delta_x = w.rect.x - old_rect.x
-#                 delta_y = w.rect.y - old_rect.y
-#                 delta_width = w.rect.width - old_rect.width
-#                 delta_height = w.rect.height - old_rect.height
-#                 # print(f'_win_move_pixels_relative: change: {delta_x=}, {delta_y=}, {delta_width=}, {delta_height=}')
-
-#         return result, horizontal_limit_reached, vertical_limit_reached
-
 def _get_diagonal_length(rect: ui.Rect) -> Tuple[int, int]:
     return math.sqrt(((rect.width - rect.x) ** 2) + ((rect.height - rect.y) ** 2))
 
@@ -820,14 +729,20 @@ def _win_set_rect(w: ui.Window, rect_in: ui.Rect) -> bool:
     def on_move(event_win: ui.Window) -> None:
         if event_win == w and w.rect != old_rect:
             q.put(1)
-            # print(f'_win_set_rect: win position changed')
+            if testing:
+                print(f'_win_set_rect: win position changed')
 
     def on_resize(event_win: ui.Window) -> None:
         if event_win == w and w.rect != old_rect:
             q.put(1)
-            # print(f'_win_set_rect: win size changed')
+            if testing:
+                print(f'_win_set_rect: win size changed')
+
+    if testing:
+        print(f'_win_set_rect: starting...')
     #
     old_rect = w.rect
+    result = False
     while retries >= 0:
         event_count = 0
         if (rect_in.x, rect_in.y) != (w.rect.x, w.rect.y):
@@ -840,7 +755,8 @@ def _win_set_rect(w: ui.Window, rect_in: ui.Rect) -> bool:
             event_count += 1
         if event_count == 0:
             # no real work to do
-            return True
+            result = True
+            break
 
         w.rect = rect_in
         try:
@@ -865,30 +781,32 @@ def _win_set_rect(w: ui.Window, rect_in: ui.Rect) -> bool:
             else:
                 if testing:
                     print('_win_set_rect: no more retries, failed')
-                return False
         except:
             log_exception(f'{sys.exc_info()[1]}')
         else:
-            # if testing:
-            #     print(f'_win_set_rect: {old_rect=}')
-            #     print(f'_win_set_rect: {rect_in=}')
+            if testing:
+                print(f'_win_set_rect: before: {old_rect}')
+                print(f'_win_set_rect: requested: {rect_in}')
+                print(f'_win_set_rect: after: {w.rect}')
+
+            result = True
 
             # results are not guaranteed, warn if the request could not be fulfilled exactly
             if (rect_in.x, rect_in.y) != (w.rect.x, w.rect.y):
-                # WIP - what to do with these warnings?
-                logging.warning(f'_win_set_rect: after update, window position does not exactly match request: {rect_in.x, rect_in.y} -> {w.rect.x, w.rect.y}')
+                result = False
+                if settings.get('user.win_verbose_warnings') != 0:
+                    logging.warning(f'_win_set_rect: after update, window position does not exactly match request: {rect_in.x, rect_in.y} -> {w.rect.x, w.rect.y}')
 
             if (rect_in.width, rect_in.height) != (w.rect.width, w.rect.height):
                 # warning below disabled because it happens normally in the course of shrinking
                 # a window (when it has reached minimal size).
-                logging.warning(f'_win_set_rect: after update, window size does not exactly match request: {rect_in.width, rect_in.height} -> {w.rect.width, w.rect.height}')
-
-            return True
+                result = False
+                if settings.get('user.win_verbose_warnings') != 0:
+                    logging.warning(f'_win_set_rect: after update, window size does not exactly match request: {rect_in.width, rect_in.height} -> {w.rect.width, w.rect.height}')
 
         finally:
             # remember old rectangle, for 'win revert'
             global last_window
-            #print(f'_win_set_rect: {old_rect=}')
             last_window = {
                 'id': w.id,
                 'rect': old_rect
@@ -896,6 +814,8 @@ def _win_set_rect(w: ui.Window, rect_in: ui.Rect) -> bool:
 
             ui.unregister('win_move',   on_move)
             ui.unregister('win_resize', on_resize)
+
+        return result
 
 def _clip_left_for_resize(w: ui.Window, x: int, width: int) -> Tuple[int, int, bool]:
     resize_left_limit_reached = False
@@ -912,7 +832,8 @@ def _clip_left_for_resize(w: ui.Window, x: int, width: int) -> Tuple[int, int, b
 
         resize_left_limit_reached = True
 
-        print(f'_clip_left_for_resize: {resize_left_limit_reached=}')
+        if testing:
+            print(f'_clip_left_for_resize: {resize_left_limit_reached=}')
 
     return x, width, resize_left_limit_reached
 
@@ -931,7 +852,8 @@ def _clip_up_for_resize(w: ui.Window, y: int, height: int) -> Tuple[int, int, bo
 
         resize_up_limit_reached = True
 
-        print(f'_clip_up_for_resize: {resize_up_limit_reached=}')
+        if testing:
+            print(f'_clip_up_for_resize: {resize_up_limit_reached=}')
 
     return y, height, resize_up_limit_reached
 
@@ -946,9 +868,10 @@ def _clip_right_for_resize(w: ui.Window, x: int, width: int) -> Tuple[int, int, 
 
         width = screen_x + screen_width - x
 
-        resize_right_limit_reached = True
+        if testing:
+            print(f'_clip_right_for_resize: {resize_right_limit_reached=}')
 
-        print(f'_clip_right_for_resize: {resize_right_limit_reached=}')
+        resize_right_limit_reached = True
 
     return x, width, resize_right_limit_reached
 
@@ -965,7 +888,8 @@ def _clip_down_for_resize(w: ui.Window, y: int, height: int) -> Tuple[int, int, 
 
         resize_down_limit_reached = True
 
-        print(f'_clip_down_for_resize: {resize_down_limit_reached=}')
+        if testing:
+            print(f'_clip_down_for_resize: {resize_down_limit_reached=}')
 
     return y, height, resize_down_limit_reached
 
@@ -977,8 +901,6 @@ def _win_resize_pixels_relative(w: ui.Window, delta_width: int, delta_height: in
     y = new_y = w.rect.y
     width = new_width = w.rect.width + delta_width
     height = new_height = w.rect.height + delta_height
-
-    # print(f'_win_resize_pixels_relative: {delta_width=}, {delta_height=}')
 
     # invert directions when shrinking non-uniformly. that is, we are shrinking *toward*
     #  the given direction rather than shrinking away from that direction.
@@ -1072,16 +994,64 @@ def _win_resize_pixels_relative(w: ui.Window, delta_width: int, delta_height: in
 
         #print(f'_win_resize_pixels_relative: from center')
 
-    # verbose, but useful sometimes
     # if testing:
-    #     print(f'_win_resize_pixels_relative: before: {w.rect=}')
-
-    # make it so
-    result = _win_set_rect(w, ui.Rect(round(new_x), round(new_y), round(new_width), round(new_height)))
+    #     print(f'_win_move_pixels_relative: {delta_x=}, {delta_y=}, {delta_width=}, {delta_height=}')
 
     # verbose, but useful sometimes
-    # if testing:
-    #     print(f'_win_resize_pixels_relative: after: {w.rect=}')
+    if testing:
+        print(f'_win_resize_pixels_relative: before: {w.rect=}')
+
+    # rounding
+    round_x = round(x)
+    round_y = round(y)
+    round_width = round(width)
+    round_height = round(height)
+    #
+    new_round_x = round(new_x)
+    new_round_y = round(new_y)
+    new_round_width = round(new_width)
+    new_round_height = round(new_height)
+
+    old_values = (round_x, round_y, round_width, round_height)
+    new_values = (new_round_x, new_round_y, new_round_width, new_round_height)
+    # WIP
+    if False and old_values == new_values:
+        if testing:
+            print(f'_win_resize_pixels_relative: new values match current values, skipping...')
+        result = True
+    else:
+        # make it so
+        result = _win_set_rect(w, ui.Rect(*new_values))
+
+        if testing:
+            print(f'_win_move_pixels_relative: _win_set_rect returned {result=}')
+            
+            diff_x = w.rect.x - round_x
+            diff_y = w.rect.y - round_y
+            diff_width = w.rect.width - round_width
+            diff_height = w.rect.height - round_height
+            print(f'_win_move_pixels_relative: change: {diff_x=}, {diff_y=}, {diff_width=}, {diff_height=}')
+
+        if not result:
+            # shrink is a special case, need to detect when the window has shrunk to a minimum by
+            # watching expected values to see when they stop changing as requested.
+            if resize_width_increment < 0:
+                if w.rect.x != new_round_x or w.rect.width != new_round_width:
+                    resize_left_limit_reached = True
+                    resize_right_limit_reached = True
+                    if testing:
+                        print(f'_win_resize_pixels_relative: horizontal shrink limit reached')
+
+            if resize_height_increment < 0:
+                if w.rect.y != new_round_y or w.rect.height != new_round_height:
+                    resize_up_limit_reached = True
+                    resize_down_limit_reached = True
+                    if testing:
+                        print(f'_win_resize_pixels_relative: vertical shrink limit reached')
+
+    # verbose, but useful sometimes
+    if testing:
+        print(f'_win_resize_pixels_relative: after: {w.rect=}')
 
     return result, resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached
 

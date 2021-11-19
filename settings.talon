@@ -50,26 +50,20 @@ settings():
     # per-application basis.
     # user.context_sensitive_dictation = 1
 
-    # The percent increment used when moving a window continuously
-    user.win_continuous_move_increment = 1
-
     # The update frequency used when moving a window continuously
     user.win_move_frequency = "30ms"
 
     # The target speed, in cm/sec, for continuous move operations
-    user.win_continuous_move_rate = 4.0
+    user.win_continuous_move_rate = 5.0
 
     # When enabled, the 'Move/Resize Window' GUI will not be shown for continuous move operations
     user.win_hide_move_gui = 0
-
-    # The percent increment used when resizing a window continuously
-    user.win_continuous_resize_increment = 1
          
     # The update frequency used when resizing a window continuously
     user.win_resize_frequency = "30ms"
 
     # The target speed, in cm/sec, for continuous resize operations
-    user.win_continuous_resize_rate = 4.0
+    user.win_continuous_resize_rate = 5.0
 
     # When enabled, the 'Move/Resize Window' GUI will not be shown for continuous resize operations
     user.win_hide_resize_gui = 0
@@ -79,6 +73,10 @@ settings():
 
     # How many times to retry a timed out talon window move/resize request 
     user.win_set_retries = 1
+
+    # Whether to generate a warning when the result of a window move or resize request does
+    # not exactly match the request (results are not guaranteed)
+    user.win_verbose_warnings = 1
 
 # uncomment tag to enable mouse grid
 # tag(): user.mouse_grid_enabled
