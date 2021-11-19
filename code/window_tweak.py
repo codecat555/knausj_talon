@@ -30,16 +30,16 @@ testing = False
 last_window: Dict = None
 
 # globals used by the continuous move/resize commands
-move_width_increment = 0
-move_height_increment = 0
-resize_width_increment = 0
-resize_height_increment = 0
-move_job = None
-resize_job = None
+continuous_move_width_increment = 0
+continuous_move_height_increment = 0
+continuous_resize_width_increment = 0
+continuous_resize_height_increment = 0
+continuous_move_job = None
+continuous_resize_job = None
 continuous_direction = None
 continuous_old_rect = None
 continuous_mutex = threading.RLock()
-
+#
 # tag used to enable/disable commands used during window move/resize operations
 continuous_tag_name = 'window_tweak_running'
 continuous_tag_name_qualified = 'user.' + continuous_tag_name
@@ -145,11 +145,11 @@ def _win_stop_gui(gui: imgui.GUI) -> None:
         actions.user.win_stop()
 
 def _win_move_continuous_helper() -> None:
-    global move_width_increment, move_height_increment
+    global continuous_move_width_increment, continuous_move_height_increment
     global continuous_mutex
 
     with continuous_mutex:
-        if not move_job:
+        if not continuous_move_job:
             # seems sometimes this gets called while the job is being canceled, so just return that case
             return
 
@@ -157,8 +157,8 @@ def _win_move_continuous_helper() -> None:
         #     print(f'win_move_continuous_helper: current thread = {threading.get_native_id()}')
 
         w = ui.active_window()
-        if round(move_width_increment) or round(move_height_increment):
-            result, horizontal_limit_reached, vertical_limit_reached = _win_move_pixels_relative(w, move_width_increment, move_height_increment, continuous_direction)
+        if round(continuous_move_width_increment) or round(continuous_move_height_increment):
+            result, horizontal_limit_reached, vertical_limit_reached = _win_move_pixels_relative(w, continuous_move_width_increment, continuous_move_height_increment, continuous_direction)
             if not result or (horizontal_limit_reached and vertical_limit_reached):
                 if testing:
                     print(f'_win_move_continuous_helper: window move is complete. {w.rect=}')
@@ -166,10 +166,10 @@ def _win_move_continuous_helper() -> None:
                 return
             else:
                 if horizontal_limit_reached:
-                    move_width_increment = 0
+                    continuous_move_width_increment = 0
 
                 if vertical_limit_reached:
-                    move_height_increment = 0
+                    continuous_move_height_increment = 0
         else:
             # move increments are both zero, nothing to do...so stop
             if testing:
@@ -178,23 +178,23 @@ def _win_move_continuous_helper() -> None:
             return
 
 def _win_resize_continuous_helper() -> None:
-    global resize_width_increment, resize_height_increment
+    global continuous_resize_width_increment, continuous_resize_height_increment
     global continuous_mutex
     
     with continuous_mutex:
-        if not resize_job:
+        if not continuous_resize_job:
             # seems sometimes this gets called while the job is being canceled, so just return that case
             return
 
         # print("win_resize_continuous_helper")
-        if round(resize_width_increment) or round(resize_height_increment):
+        if round(continuous_resize_width_increment) or round(continuous_resize_height_increment):
             w = ui.active_window()
-            result, resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached = _win_resize_pixels_relative(w, resize_width_increment, resize_height_increment, continuous_direction)
+            result, resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached = _win_resize_pixels_relative(w, continuous_resize_width_increment, continuous_resize_height_increment, continuous_direction)
 
             # this can happen if a stop operation is in process when cron calls this method. in that case,
             # we can just return.
             if not continuous_direction:
-                if resize_job:
+                if continuous_resize_job:
                     if settings.get('user.win_verbose_warnings') != 0:
                         # I don't ever expect to see this, that's why it's here
                         logging.warning('_win_resize_continuous_helper: found null continuous_direction while a resize job is running...')
@@ -206,28 +206,28 @@ def _win_resize_continuous_helper() -> None:
                 if any([resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached]):
                     if testing:
                         print(f'_win_resize_continuous_helper: single direction limit reached')
-                    resize_width_increment = 0
-                    resize_height_increment = 0
+                    continuous_resize_width_increment = 0
+                    continuous_resize_height_increment = 0
             elif direction_count == 2:    # diagonal
                 if resize_left_limit_reached or resize_right_limit_reached:
                     if testing:
                         print(f'_win_resize_continuous_helper: horizontal limit reached')
-                    resize_width_increment = 0
+                    continuous_resize_width_increment = 0
                 #
                 if resize_up_limit_reached or resize_down_limit_reached:
                     if testing:
                         print(f'_win_resize_continuous_helper: vertical limit reached')
-                    resize_height_increment = 0
+                    continuous_resize_height_increment = 0
             elif direction_count == 4:    # from center
                 if resize_left_limit_reached and resize_right_limit_reached:
                     if testing:
                         print(f'_win_resize_continuous_helper: horizontal limit reached')
-                    resize_width_increment = 0
+                    continuous_resize_width_increment = 0
 
                 if resize_up_limit_reached and resize_down_limit_reached:
                     if testing:
                         print(f'_win_resize_continuous_helper: vertical limit reached')
-                    resize_height_increment = 0
+                    continuous_resize_height_increment = 0
         else:
             # resize increments are both zero, nothing to do...so stop
             if testing:
@@ -240,44 +240,44 @@ def _win_resize_continuous_helper() -> None:
             _win_stop()
 
 def _reset_continuous_flags() -> None:
-    global move_width_increment, move_height_increment, resize_width_increment, resize_height_increment, move_job, move_job, resize_job
+    global continuous_move_width_increment, continuous_move_height_increment, continuous_resize_width_increment, continuous_resize_height_increment, continuous_move_job, continuous_move_job, continuous_resize_job
     global continuous_direction, continuous_old_rect
 
     with continuous_mutex:
         # globals used by the continuous move/resize commands
-        move_width_increment = 0
-        move_height_increment = 0
-        resize_width_increment = 0
-        resize_height_increment = 0
-        move_job = None
-        resize_job = None
+        continuous_move_width_increment = 0
+        continuous_move_height_increment = 0
+        continuous_resize_width_increment = 0
+        continuous_resize_height_increment = 0
+        continuous_move_job = None
+        continuous_resize_job = None
         continuous_direction = None
         continuous_old_rect = None
 
 def _start_move() -> None:
-    global move_job
+    global continuous_move_job
 
     with continuous_mutex:
         # WIP - for some reason, below doesn't work here
         # ctx.tags.add(continuous_tag_name_qualified)
         ctx.tags = [continuous_tag_name_qualified]
         #print(f'_start_move: enabled tag "continuous tag name qualified", now {registry.tags=}')
-        move_job = cron.interval(settings.get('user.win_move_frequency'), _win_move_continuous_helper)
+        continuous_move_job = cron.interval(settings.get('user.win_move_frequency'), _win_move_continuous_helper)
 
 def _start_resize() -> None:
-    global resize_job
+    global continuous_resize_job
 
     with continuous_mutex:
         # ctx.tags.add(continuous_tag_name_qualified)
         ctx.tags = [continuous_tag_name_qualified]
-        resize_job = cron.interval(settings.get('user.win_resize_frequency'), _win_resize_continuous_helper)
+        continuous_resize_job = cron.interval(settings.get('user.win_resize_frequency'), _win_resize_continuous_helper)
 
 def _win_move_continuous(w: ui.Window, direction: Direction) -> None:
-    global move_width_increment, move_height_increment, continuous_direction, continuous_old_rect
+    global continuous_move_width_increment, continuous_move_height_increment, continuous_direction, continuous_old_rect
     global continuous_mutex
 
     with continuous_mutex:
-        if move_job:
+        if continuous_move_job:
             logging.warning('cannot start a move job when one is already running')
             return
 
@@ -287,10 +287,10 @@ def _win_move_continuous(w: ui.Window, direction: Direction) -> None:
 
         continuous_old_rect = w.rect
 
-        move_width_increment, move_height_increment = _get_continuous_parameters(w, settings.get('user.win_continuous_move_rate'), direction, 'move')
+        continuous_move_width_increment, continuous_move_height_increment = _get_continuous_parameters(w, settings.get('user.win_continuous_move_rate'), direction, 'move')
 
         if testing:
-            print(f'_win_move_continuous: {move_width_increment=}, {move_height_increment=}')
+            print(f'_win_move_continuous: {continuous_move_width_increment=}, {continuous_move_height_increment=}')
 
         _start_move()
 
@@ -298,26 +298,26 @@ def _win_move_continuous(w: ui.Window, direction: Direction) -> None:
             _win_stop_gui.show()
 
 def _win_resize_continuous(w: ui.Window, multiplier: int, direction: Optional[Direction] = None) -> None:
-    global resize_width_increment, resize_height_increment, continuous_direction, continuous_old_rect
+    global continuous_resize_width_increment, continuous_resize_height_increment, continuous_direction, continuous_old_rect
     global continuous_mutex
 
     with continuous_mutex:
-        if resize_job:
+        if continuous_resize_job:
             logging.warning('cannot start a resize job when one is already running')
             return
 
-        resize_width_increment, resize_height_increment = _get_continuous_parameters(w, settings.get('user.win_continuous_resize_rate'), direction, '_resize')
+        continuous_resize_width_increment, continuous_resize_height_increment = _get_continuous_parameters(w, settings.get('user.win_continuous_resize_rate'), direction, '_resize')
 
         # apply multiplier to control whether we're stretching or shrinking
-        resize_width_increment *= multiplier
-        resize_height_increment *= multiplier
+        continuous_resize_width_increment *= multiplier
+        continuous_resize_height_increment *= multiplier
 
         continuous_direction = direction
 
         continuous_old_rect = w.rect
 
         if testing:
-            print(f'_win_resize_continuous: starting resize - {resize_width_increment=}, {resize_height_increment=}, {continuous_direction=}, {multiplier=}')
+            print(f'_win_resize_continuous: starting resize - {continuous_resize_width_increment=}, {continuous_resize_height_increment=}, {continuous_direction=}, {multiplier=}')
 
         _start_resize()
 
@@ -327,11 +327,11 @@ def _win_resize_continuous(w: ui.Window, multiplier: int, direction: Optional[Di
 
 def _win_stop() -> None:
     global continuous_mutex
-    global move_width_increment, move_height_increment, resize_width_increment, resize_height_increment, move_job, resize_job
+    global continuous_move_width_increment, continuous_move_height_increment, continuous_resize_width_increment, continuous_resize_height_increment, continuous_move_job, continuous_resize_job
     global last_window, continuous_direction, continuous_old_rect
 
     with continuous_mutex:
-        if not move_job and not resize_job:
+        if not continuous_move_job and not continuous_resize_job:
             if testing:
                 print('_win_stop: no jobs to stop (may have stopped automatically via clipping logic)')
             return
@@ -339,11 +339,11 @@ def _win_stop() -> None:
         if testing:
             print(f'_win_stop: current thread = {threading.get_native_id()}')
 
-        if move_job:
-            cron.cancel(move_job)
+        if continuous_move_job:
+            cron.cancel(continuous_move_job)
 
-        if resize_job:
-            cron.cancel(resize_job)
+        if continuous_resize_job:
+            cron.cancel(continuous_resize_job)
 
         # ctx.tags.remove(continuous_tag_name_qualified)
         ctx.tags = []
@@ -1063,14 +1063,14 @@ def _win_resize_pixels_relative(w: ui.Window, delta_width: int, delta_height: in
     if not result:
         # shrink is a special case, need to detect when the window has shrunk to a minimum by
         # watching expected values to see when they stop changing as requested.
-        if resize_width_increment < 0:
+        if continuous_resize_width_increment < 0:
             if w.rect.x != new_round_x or w.rect.width != new_round_width:
                 resize_left_limit_reached = True
                 resize_right_limit_reached = True
                 if testing:
                     print(f'_win_resize_pixels_relative: horizontal shrink limit reached')
 
-        if resize_height_increment < 0:
+        if continuous_resize_height_increment < 0:
             if w.rect.y != new_round_y or w.rect.height != new_round_height:
                 resize_up_limit_reached = True
                 resize_down_limit_reached = True
