@@ -364,7 +364,7 @@ def _win_stop() -> None:
 
         _win_stop_gui.hide()
 
-def _clip_to_screen_for_move(w, x: int, y: int, width: int, height: int, direction: Direction) -> Tuple[int, int, bool, bool]:
+def _clip_to_screen_for_move(w, x: float, y: float, width: float, height: float, direction: Direction) -> Tuple[int, int, bool, bool]:
     screen = w.screen
     screen_x = screen.visible_rect.x
     screen_y = screen.visible_rect.y
@@ -402,7 +402,7 @@ def _clip_to_screen_for_move(w, x: int, y: int, width: int, height: int, directi
 
     return new_x, new_y, horizontal_limit_reached, vertical_limit_reached
 
-def _win_move_pixels_relative(w: ui.Window, delta_x: int, delta_y: int, direction: Direction) -> Tuple[bool, bool, bool]:
+def _win_move_pixels_relative(w: ui.Window, delta_x: float, delta_y: float, direction: Direction) -> Tuple[bool, bool, bool]:
         result = horizontal_limit_reached = vertical_limit_reached = False
 
         # start with the current values
@@ -517,7 +517,7 @@ def _get_center_to_center_rect(w: ui.Window) -> ui.Rect:
 
     return center_to_center_rect, horizontal_multiplier, vertical_multiplier
 
-def _get_component_dimensions(w: ui.Window, distance: int, direction: Direction, operation: str) -> Tuple[int, int]:
+def _get_component_dimensions(w: ui.Window, distance: float, direction: Direction, operation: str) -> Tuple[int, int]:
     delta_width = delta_height = 0
     rect = w.rect
     direction_count = sum(direction.values())
@@ -569,7 +569,7 @@ def _get_component_dimensions(w: ui.Window, distance: int, direction: Direction,
 
     return delta_width, delta_height
 
-def _get_component_dimensions_by_percent(w: ui.Window, percent: int, direction: Direction, operation: str) -> Tuple[int, int]:
+def _get_component_dimensions_by_percent(w: ui.Window, percent: float, direction: Direction, operation: str) -> Tuple[int, int]:
     if testing:
         print(f'_get_component_dimensions_by_percent: {percent=}')
 
@@ -638,7 +638,7 @@ def _get_continuous_parameters(w: ui.Window, rate_cps: float, direction: Directi
 
 # note: this method is used by win_move_absolute(), which interprets the Direction
 # argument differently than elsewhere in this module.
-def _translate_top_left_by_region_for_move(w: ui.Window, target_x: int, target_y: int, region_in: Direction) -> Tuple[int, int]:
+def _translate_top_left_by_region_for_move(w: ui.Window, target_x: float, target_y: float, region_in: Direction) -> Tuple[int, int]:
 
     width = w.rect.width
     height = w.rect.height
@@ -687,7 +687,7 @@ def _translate_top_left_by_region_for_move(w: ui.Window, target_x: int, target_y
 
     return target_x, target_y
 
-def _translate_top_left_by_region_for_resize(w: ui.Window, target_width: int, target_height: int, direction: Direction) -> Tuple[int, int]:
+def _translate_top_left_by_region_for_resize(w: ui.Window, target_width: float, target_height: float, direction: Direction) -> Tuple[int, int]:
 
     x = w.rect.x
     y = w.rect.y
@@ -858,7 +858,7 @@ def _win_set_rect(w: ui.Window, rect_in: ui.Rect) -> bool:
 
         return result
 
-def _clip_left_for_resize(w: ui.Window, x: int, width: int, direction: Direction) -> Tuple[int, int, bool]:
+def _clip_left_for_resize(w: ui.Window, x: float, width: float, direction: Direction) -> Tuple[int, int, bool]:
     resize_left_limit_reached = False
 
     screen_x = w.screen.visible_rect.x
@@ -878,7 +878,7 @@ def _clip_left_for_resize(w: ui.Window, x: int, width: int, direction: Direction
 
     return x, width, resize_left_limit_reached
 
-def _clip_up_for_resize(w: ui.Window, y: int, height: int, direction: Direction) -> Tuple[int, int, bool]:
+def _clip_up_for_resize(w: ui.Window, y: float, height: float, direction: Direction) -> Tuple[int, int, bool]:
     resize_up_limit_reached = False
 
     screen_y = w.screen.visible_rect.y
@@ -898,7 +898,7 @@ def _clip_up_for_resize(w: ui.Window, y: int, height: int, direction: Direction)
 
     return y, height, resize_up_limit_reached
 
-def _clip_right_for_resize(w: ui.Window, x: int, width: int, direction: Direction) -> Tuple[int, int, bool]:
+def _clip_right_for_resize(w: ui.Window, x: float, width: float, direction: Direction) -> Tuple[int, int, bool]:
     resize_right_limit_reached = False
 
     screen_x = w.screen.visible_rect.x
@@ -916,7 +916,7 @@ def _clip_right_for_resize(w: ui.Window, x: int, width: int, direction: Directio
 
     return x, width, resize_right_limit_reached
 
-def _clip_down_for_resize(w: ui.Window, y: int, height: int, direction: Direction) -> Tuple[int, int, bool]:
+def _clip_down_for_resize(w: ui.Window, y: float, height: float, direction: Direction) -> Tuple[int, int, bool]:
     resize_down_limit_reached = False
 
     screen_y = w.screen.visible_rect.y
@@ -934,7 +934,7 @@ def _clip_down_for_resize(w: ui.Window, y: int, height: int, direction: Directio
 
     return y, height, resize_down_limit_reached
 
-def _win_resize_pixels_relative(w: ui.Window, delta_width: int, delta_height: int, direction_in: Direction) -> Tuple[bool, bool, bool, bool, bool]:
+def _win_resize_pixels_relative(w: ui.Window, delta_width: float, delta_height: float, direction_in: Direction) -> Tuple[bool, bool, bool, bool, bool]:
     result = resize_left_limit_reached = resize_up_limit_reached = resize_right_limit_reached = resize_down_limit_reached = False
 
     # start with the current values
@@ -1193,7 +1193,7 @@ class Actions:
         w = ui.active_window()
         _win_move_continuous(w, direction)
 
-    def win_move_absolute(x_in: int, y_in: int, region: Optional[Direction] = None) -> None:
+    def win_move_absolute(x_in: float, y_in: float, region: Optional[Direction] = None) -> None:
         "Move window to given absolute position, centered on the point indicated by the given region"
 
         w = ui.active_window()
@@ -1231,7 +1231,7 @@ class Actions:
 
         _win_resize_continuous(w, -1, direction)
 
-    def win_resize_absolute(target_width: int, target_height: int, region_in: Optional[Direction] = None) -> None:
+    def win_resize_absolute(target_width: float, target_height: float, region_in: Optional[Direction] = None) -> None:
         "Size window to given absolute dimensions, optionally by stretching/shrinking in the direction indicated by the given region"
         w = ui.active_window()
 
@@ -1275,7 +1275,7 @@ class Actions:
 
         return _win_move_pixels_relative(w, delta_width, delta_height, direction)
 
-    def win_move_percent(percent: int, direction: Direction) -> None:
+    def win_move_percent(percent: float, direction: Direction) -> None:
         "move window some percentage of the current size"
 
         w = ui.active_window()
@@ -1295,7 +1295,7 @@ class Actions:
 
         _win_resize_pixels_relative(w, delta_width, delta_height, direction)
 
-    def win_resize_percent(percent: int, direction: Direction) -> None:
+    def win_resize_percent(percent: float, direction: Direction) -> None:
         "change window size by a percentage of current size"
 
         w = ui.active_window()
