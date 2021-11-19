@@ -3,8 +3,9 @@ Tools for managing window size and position.
 
 Continuous move/resize machinery adapted from mouse.py.
 """
-# WIP - 'win stretch forty percent' - what should this do (if anything)?
-# WIP - move 'win stop' action to separate file, enabled by tag
+# WIP - bug: move window offscreen and then try to shrink it down onto the screen...it stops shrinking at the screen border.
+# WIP - rig 'move center' to move along a more direct line
+# WIP - review _win_set_rect() return value handling it cross all instances
 # WIP - refactor into classes, move globals into class or instance variables
 
 from typing import Dict, List, Tuple, Optional
@@ -15,7 +16,7 @@ import logging
 import sys
 import threading
 
-from talon import ui, Module, actions, speech_system, ctrl, imgui, cron, settings, app
+from talon import ui, Module, Context, actions, speech_system, ctrl, imgui, cron, settings, app, registry
 from talon.types.point import Point2d
 from talon.debug import log_exception
 
@@ -23,7 +24,7 @@ from talon.debug import log_exception
 Direction = Dict[str, bool]
 
 # turn debug messages on and off
-testing = True
+testing = False
 
 # remember the last window for use by the 'win revert' command
 last_window: Dict = None
@@ -39,30 +40,45 @@ continuous_direction = None
 continuous_old_rect = None
 continuous_mutex = threading.RLock()
 
+# tag used to enable/disable commands used during window move/resize operations
+continuous_tag_name = 'window_tweak_running'
+continuous_tag_name_qualified = 'user.' + continuous_tag_name
+
 mod = Module()
+
+mod.tag(continuous_tag_name, desc="Enable stop command during continuous window move/resize.")
+
+# context used to enable/disable window_tweak_running tag
+ctx = Context()
+
+# context containing the stop command, enabled only when a continuous move/resize is running
+ctx_stop = Context()
+ctx_stop.matches = fr"""
+tag: user.{continuous_tag_name}
+"""
 
 mod.setting(
     "win_move_frequency",
     type=str,
-    default="100ms",
+    default="30ms",
     desc="The update frequency used when moving a window continuously",
 )
 mod.setting(
     "win_resize_frequency",
     type=str,
-    default="100ms",
+    default="30ms",
     desc="The update frequency used when resizing a window continuously",
 )
 mod.setting(
     "win_continuous_move_rate",
     type=float,
-    default=1.0,
+    default=4.5,
     desc="The target speed, in cm/sec, for continuous move operations",
 )
 mod.setting(
     "win_continuous_resize_rate",
     type=float,
-    default=1.0,
+    default=4.0,
     desc="The target speed, in cm/sec, for continuous resize operations",
 )
 mod.setting(
@@ -188,16 +204,19 @@ def _win_resize_continuous_helper() -> None:
             direction_count = sum(continuous_direction.values())
             if direction_count == 1:    # horizontal or vertical
                 if any([resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached]):
-                    print(f'_win_resize_continuous_helper: single direction limit reached')
+                    if testing:
+                        print(f'_win_resize_continuous_helper: single direction limit reached')
                     resize_width_increment = 0
                     resize_height_increment = 0
             elif direction_count == 2:    # diagonal
                 if resize_left_limit_reached or resize_right_limit_reached:
-                    print(f'_win_resize_continuous_helper: horizontal limit reached')
+                    if testing:
+                        print(f'_win_resize_continuous_helper: horizontal limit reached')
                     resize_width_increment = 0
                 #
                 if resize_up_limit_reached or resize_down_limit_reached:
-                    print(f'_win_resize_continuous_helper: vertical limit reached')
+                    if testing:
+                        print(f'_win_resize_continuous_helper: vertical limit reached')
                     resize_height_increment = 0
             elif direction_count == 4:    # from center
                 if resize_left_limit_reached and resize_right_limit_reached:
@@ -238,12 +257,20 @@ def _reset_continuous_flags() -> None:
 def _start_move() -> None:
     global move_job
 
-    move_job = cron.interval(settings.get('user.win_move_frequency'), _win_move_continuous_helper)
+    with continuous_mutex:
+        # WIP - for some reason, below doesn't work here
+        # ctx.tags.add(continuous_tag_name_qualified)
+        ctx.tags = [continuous_tag_name_qualified]
+        #print(f'_start_move: enabled tag "continuous tag name qualified", now {registry.tags=}')
+        move_job = cron.interval(settings.get('user.win_move_frequency'), _win_move_continuous_helper)
 
 def _start_resize() -> None:
     global resize_job
 
-    resize_job = cron.interval(settings.get('user.win_resize_frequency'), _win_resize_continuous_helper)
+    with continuous_mutex:
+        # ctx.tags.add(continuous_tag_name_qualified)
+        ctx.tags = [continuous_tag_name_qualified]
+        resize_job = cron.interval(settings.get('user.win_resize_frequency'), _win_resize_continuous_helper)
 
 def _win_move_continuous(w: ui.Window, direction: Direction) -> None:
     global move_width_increment, move_height_increment, continuous_direction, continuous_old_rect
@@ -262,7 +289,8 @@ def _win_move_continuous(w: ui.Window, direction: Direction) -> None:
 
         move_width_increment, move_height_increment = _get_continuous_parameters(w, settings.get('user.win_continuous_move_rate'), direction, 'move')
 
-        print(f'_win_move_continuous: {move_width_increment=}, {move_height_increment=}')
+        if testing:
+            print(f'_win_move_continuous: {move_width_increment=}, {move_height_increment=}')
 
         _start_move()
 
@@ -317,9 +345,14 @@ def _win_stop() -> None:
         if resize_job:
             cron.cancel(resize_job)
 
+        # ctx.tags.remove(continuous_tag_name_qualified)
+        ctx.tags = []
+        
         if continuous_old_rect:
             # remember starting rectangle
-            print(f'_win_stop: {continuous_old_rect=}')
+            if testing:
+                print(f'_win_stop: {continuous_old_rect=}')
+                
             last_window = {
                 'id': ui.active_window().id,
                 'rect': continuous_old_rect
@@ -1014,40 +1047,35 @@ def _win_resize_pixels_relative(w: ui.Window, delta_width: int, delta_height: in
 
     old_values = (round_x, round_y, round_width, round_height)
     new_values = (new_round_x, new_round_y, new_round_width, new_round_height)
-    # WIP
-    if False and old_values == new_values:
-        if testing:
-            print(f'_win_resize_pixels_relative: new values match current values, skipping...')
-        result = True
-    else:
-        # make it so
-        result = _win_set_rect(w, ui.Rect(*new_values))
+    
+    # make it so
+    result = _win_set_rect(w, ui.Rect(*new_values))
 
-        if testing:
-            print(f'_win_move_pixels_relative: _win_set_rect returned {result=}')
-            
-            diff_x = w.rect.x - round_x
-            diff_y = w.rect.y - round_y
-            diff_width = w.rect.width - round_width
-            diff_height = w.rect.height - round_height
-            print(f'_win_move_pixels_relative: change: {diff_x=}, {diff_y=}, {diff_width=}, {diff_height=}')
+    if testing:
+        print(f'_win_move_pixels_relative: _win_set_rect returned {result=}')
+        
+        diff_x = w.rect.x - round_x
+        diff_y = w.rect.y - round_y
+        diff_width = w.rect.width - round_width
+        diff_height = w.rect.height - round_height
+        print(f'_win_move_pixels_relative: change: {diff_x=}, {diff_y=}, {diff_width=}, {diff_height=}')
 
-        if not result:
-            # shrink is a special case, need to detect when the window has shrunk to a minimum by
-            # watching expected values to see when they stop changing as requested.
-            if resize_width_increment < 0:
-                if w.rect.x != new_round_x or w.rect.width != new_round_width:
-                    resize_left_limit_reached = True
-                    resize_right_limit_reached = True
-                    if testing:
-                        print(f'_win_resize_pixels_relative: horizontal shrink limit reached')
+    if not result:
+        # shrink is a special case, need to detect when the window has shrunk to a minimum by
+        # watching expected values to see when they stop changing as requested.
+        if resize_width_increment < 0:
+            if w.rect.x != new_round_x or w.rect.width != new_round_width:
+                resize_left_limit_reached = True
+                resize_right_limit_reached = True
+                if testing:
+                    print(f'_win_resize_pixels_relative: horizontal shrink limit reached')
 
-            if resize_height_increment < 0:
-                if w.rect.y != new_round_y or w.rect.height != new_round_height:
-                    resize_up_limit_reached = True
-                    resize_down_limit_reached = True
-                    if testing:
-                        print(f'_win_resize_pixels_relative: vertical shrink limit reached')
+        if resize_height_increment < 0:
+            if w.rect.y != new_round_y or w.rect.height != new_round_height:
+                resize_up_limit_reached = True
+                resize_down_limit_reached = True
+                if testing:
+                    print(f'_win_resize_pixels_relative: vertical shrink limit reached')
 
     # verbose, but useful sometimes
     if testing:
@@ -1147,8 +1175,10 @@ class Actions:
         _win_show.hide()
 
     def win_stop() -> None:
-        "Stops current window move/resize operation"
-        _win_stop()
+        "Module action declaration for stopping current window move/resize operation"
+        if testing:
+            print('win_stop() not implemented in current context')
+        pass
 
     def win_move(direction: Optional[Direction] = None) -> None:
         "Move window in small increments in the given direction, until stopped"
@@ -1291,3 +1321,12 @@ class Actions:
             if testing:
                 print(f'win_revert: reverting size and/or position for {last_window}')
             _win_set_rect(w, last_window['rect'])
+
+@ctx_stop.action_class("user")
+class WindowTweakActions:
+    """
+    # Commands for controlling continuous window move/resize operations
+    """
+    def win_stop() -> None:
+        "Stops current window move/resize operation"
+        _win_stop()
