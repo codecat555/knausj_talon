@@ -3,7 +3,8 @@ Tools for managing window size and position.
 
 Continuous move/resize machinery adapted from mouse.py.
 """
-# WIP - bug: move window offscreen and then try to shrink it down onto the screen...it stops shrinking at the screen border.
+# WIP - spurious stops occasionally break continuous operations
+# WIP - check all function arguments for correct type, e.g. int instead of float
 # WIP - rig 'move center' to move along a more direct line
 # WIP - review _win_set_rect() return value handling it cross all instances
 # WIP - refactor into classes, move globals into class or instance variables
@@ -24,7 +25,7 @@ from talon.debug import log_exception
 Direction = Dict[str, bool]
 
 # turn debug messages on and off
-testing = False
+testing = True
 
 # remember the last window for use by the 'win revert' command
 last_window: Dict = None
@@ -363,27 +364,43 @@ def _win_stop() -> None:
 
         _win_stop_gui.hide()
 
-
-def _clip_to_screen_for_move(w, x: int, y: int, width: int, height: int) -> Tuple[int, int]:
+def _clip_to_screen_for_move(w, x: int, y: int, width: int, height: int, direction: Direction) -> Tuple[int, int, bool, bool]:
     screen = w.screen
     screen_x = screen.visible_rect.x
     screen_y = screen.visible_rect.y
     screen_width = screen.visible_rect.width
     screen_height = screen.visible_rect.height
 
+    horizontal_limit_reached = vertical_limit_reached = False
+
     new_x = x
     new_y = y
-    if x < screen_x:
+    if x < screen_x and direction["left"]:
         new_x = screen_x
-    elif x > screen_x + screen_width - width:
+        horizontal_limit_reached = True
+    elif x > screen_x + screen_width - width and direction["right"]:
         new_x = screen_x + screen_width - width
+        horizontal_limit_reached = True
 
-    if y < screen_y:
+    if y < screen_y and direction["up"]:
         new_y = screen_y
-    elif y > screen_y + screen_height - height:
+        vertical_limit_reached = True
+    elif y > screen_y + screen_height - height and direction["down"]:
         new_y = screen_y + screen_height - height
+        vertical_limit_reached = True
 
-    return new_x, new_y
+    # if new_x != x:
+    #     # done moving horizontally
+    #     if new_x < x and direction["left"]:
+    #         horizontal_limit_reached = True
+    #     elif new_x > x and direction["right"]:
+    #         horizontal_limit_reached = True
+    #
+    # if new_y != y:
+    #     # done moving vertically
+    #     vertical_limit_reached = True
+
+    return new_x, new_y, horizontal_limit_reached, vertical_limit_reached
 
 def _win_move_pixels_relative(w: ui.Window, delta_x: int, delta_y: int, direction: Direction) -> Tuple[bool, bool, bool]:
         result = horizontal_limit_reached = vertical_limit_reached = False
@@ -410,7 +427,6 @@ def _win_move_pixels_relative(w: ui.Window, delta_x: int, delta_y: int, directio
 
             screen = w.screen
             screen_center = screen.visible_rect.center
-
 
             target_x = screen_center.x - window_width/2
             target_y = screen_center.y - window_height/2
@@ -454,18 +470,10 @@ def _win_move_pixels_relative(w: ui.Window, delta_x: int, delta_y: int, directio
             if direction["down"]:
                 y += delta_y
 
-            new_x, new_y = _clip_to_screen_for_move(w, x, y, w.rect.width, w.rect.height)
+            new_x, new_y, horizontal_limit_reached, vertical_limit_reached = _clip_to_screen_for_move(w, x, y, w.rect.width, w.rect.height, direction)
 
             # print(f'_win_move_pixels_relative: {x=},  {y=}, {new_x=}, {new_y=}')s
             
-            if new_x != x:
-                # done moving horizontally
-                horizontal_limit_reached = True
-            #
-            if new_y != y:
-                # done moving vertically
-                vertical_limit_reached = True
-
         # if testing:
         #     print(f'_win_move_pixels_relative: before: {w.rect=}')
         #     #print(f'_win_move_pixels_relative: {new_x=}, {new_y=}')
@@ -850,13 +858,13 @@ def _win_set_rect(w: ui.Window, rect_in: ui.Rect) -> bool:
 
         return result
 
-def _clip_left_for_resize(w: ui.Window, x: int, width: int) -> Tuple[int, int, bool]:
+def _clip_left_for_resize(w: ui.Window, x: int, width: int, direction: Direction) -> Tuple[int, int, bool]:
     resize_left_limit_reached = False
 
     screen_x = w.screen.visible_rect.x
 
     # clip to screen
-    if x < screen_x:
+    if x < screen_x and direction['left']:
         # print(f'_clip_left: left clipping')
 
         # update width before updating new_x
@@ -870,13 +878,13 @@ def _clip_left_for_resize(w: ui.Window, x: int, width: int) -> Tuple[int, int, b
 
     return x, width, resize_left_limit_reached
 
-def _clip_up_for_resize(w: ui.Window, y: int, height: int) -> Tuple[int, int, bool]:
+def _clip_up_for_resize(w: ui.Window, y: int, height: int, direction: Direction) -> Tuple[int, int, bool]:
     resize_up_limit_reached = False
 
     screen_y = w.screen.visible_rect.y
 
     # clip to screen
-    if y < screen_y:
+    if y < screen_y and direction['up']:
         # print(f'_clip_up: up clipping')
 
         # update height before updating y
@@ -890,13 +898,13 @@ def _clip_up_for_resize(w: ui.Window, y: int, height: int) -> Tuple[int, int, bo
 
     return y, height, resize_up_limit_reached
 
-def _clip_right_for_resize(w: ui.Window, x: int, width: int) -> Tuple[int, int, bool]:
+def _clip_right_for_resize(w: ui.Window, x: int, width: int, direction: Direction) -> Tuple[int, int, bool]:
     resize_right_limit_reached = False
 
     screen_x = w.screen.visible_rect.x
     screen_width = w.screen.visible_rect.width
 
-    if x + width > screen_x + screen_width:
+    if x + width > screen_x + screen_width and direction['right']:
         # print(f'_clip_right: right clipping')
 
         width = screen_x + screen_width - x
@@ -908,13 +916,13 @@ def _clip_right_for_resize(w: ui.Window, x: int, width: int) -> Tuple[int, int, 
 
     return x, width, resize_right_limit_reached
 
-def _clip_down_for_resize(w: ui.Window, y: int, height: int) -> Tuple[int, int, bool]:
+def _clip_down_for_resize(w: ui.Window, y: int, height: int, direction: Direction) -> Tuple[int, int, bool]:
     resize_down_limit_reached = False
 
     screen_y = w.screen.visible_rect.y
     screen_height = w.screen.visible_rect.height
 
-    if y + height > screen_y + screen_height:
+    if y + height > screen_y + screen_height and direction['down']:
         # print(f'_clip_down: down clipping')
 
         height = screen_y + screen_height - y
@@ -960,18 +968,18 @@ def _win_resize_pixels_relative(w: ui.Window, delta_width: int, delta_height: in
         # apply changes as indicated
         if direction["left"]:
             new_x = new_x - delta_width
-            new_x, new_width, resize_left_limit_reached = _clip_left_for_resize(w, new_x, new_width)
+            new_x, new_width, resize_left_limit_reached = _clip_left_for_resize(w, new_x, new_width, direction)
         #
         if direction["up"]:
             new_y = new_y - delta_height
-            new_y, new_height, resize_up_limit_reached = _clip_up_for_resize(w, new_y, new_height)
+            new_y, new_height, resize_up_limit_reached = _clip_up_for_resize(w, new_y, new_height, direction)
         #
         if direction["right"]:
-            new_x, new_width, resize_right_limit_reached = _clip_right_for_resize(w, new_x, new_width)
+            new_x, new_width, resize_right_limit_reached = _clip_right_for_resize(w, new_x, new_width, direction)
         #
         if direction["down"]:
             new_height = new_height + delta_height
-            new_y, new_height, resize_down_limit_reached = _clip_down_for_resize(w, new_y, new_height)
+            new_y, new_height, resize_down_limit_reached = _clip_down_for_resize(w, new_y, new_height, direction)
 
     elif direction_count == 2:    # stretch diagonally
         if direction["left"] and direction["up"]:
@@ -979,8 +987,8 @@ def _win_resize_pixels_relative(w: ui.Window, delta_width: int, delta_height: in
             new_x = new_x - delta_width
             new_y = new_y - delta_height
 
-            new_x, new_width, resize_left_limit_reached = _clip_left_for_resize(w, new_x, new_width)
-            new_y, new_height, resize_up_limit_reached = _clip_up_for_resize(w, new_y, new_height)
+            new_x, new_width, resize_left_limit_reached = _clip_left_for_resize(w, new_x, new_width, direction)
+            new_y, new_height, resize_up_limit_reached = _clip_up_for_resize(w, new_y, new_height, direction)
 
             #print(f'_win_resize_pixels_relative: left and up')
 
@@ -990,16 +998,16 @@ def _win_resize_pixels_relative(w: ui.Window, delta_width: int, delta_height: in
             # adjust y to account for the entire change in height
             new_y = new_y - delta_height
 
-            new_x, new_width, resize_right_limit_reached = _clip_right_for_resize(w, new_x, new_width)
-            new_y, new_height, resize_up_limit_reached = _clip_up_for_resize(w, new_y, new_height)
+            new_x, new_width, resize_right_limit_reached = _clip_right_for_resize(w, new_x, new_width, direction)
+            new_y, new_height, resize_up_limit_reached = _clip_up_for_resize(w, new_y, new_height, direction)
 
             #print(f'_win_resize_pixels_relative: right and up')
 
         elif direction["right"] and direction["down"]:
             # we are stretching southeast so the coordinates must not change for the northwestern corner,
             # nothing to do here x and y are already set correctly for this case
-            new_x, new_width, resize_right_limit_reached = _clip_right_for_resize(w, new_x, new_width)
-            new_y, new_height, resize_down_limit_reached = _clip_down_for_resize(w, new_y, new_height)
+            new_x, new_width, resize_right_limit_reached = _clip_right_for_resize(w, new_x, new_width, direction)
+            new_y, new_height, resize_down_limit_reached = _clip_down_for_resize(w, new_y, new_height, direction)
 
             #print(f'_win_resize_pixels_relative: right and down')
 
@@ -1008,8 +1016,8 @@ def _win_resize_pixels_relative(w: ui.Window, delta_width: int, delta_height: in
             # adjust x to account for the entire change in width
             new_x = new_x - delta_width
 
-            new_x, new_width, resize_left_limit_reached = _clip_left_for_resize(w, new_x, new_width)
-            new_y, new_height, resize_down_limit_reached = _clip_down_for_resize(w, new_y, new_height)
+            new_x, new_width, resize_left_limit_reached = _clip_left_for_resize(w, new_x, new_width, direction)
+            new_y, new_height, resize_down_limit_reached = _clip_down_for_resize(w, new_y, new_height, direction)
 
             #print(f'_win_resize_pixels_relative: left and down')
 
@@ -1017,13 +1025,13 @@ def _win_resize_pixels_relative(w: ui.Window, delta_width: int, delta_height: in
         new_x = new_x - delta_width / 2
         new_y = new_y - delta_height / 2
 
-        new_x, new_width, resize_left_limit_reached = _clip_left_for_resize(w, new_x, new_width)
+        new_x, new_width, resize_left_limit_reached = _clip_left_for_resize(w, new_x, new_width, direction)
 
-        new_y, new_height, resize_up_limit_reached = _clip_up_for_resize(w, new_y, new_height)
+        new_y, new_height, resize_up_limit_reached = _clip_up_for_resize(w, new_y, new_height, direction)
 
-        new_x, new_width, resize_right_limit_reached = _clip_right_for_resize(w, new_x, new_width)
+        new_x, new_width, resize_right_limit_reached = _clip_right_for_resize(w, new_x, new_width, direction)
 
-        new_y, new_height, resize_down_limit_reached = _clip_down_for_resize(w, new_y, new_height)
+        new_y, new_height, resize_down_limit_reached = _clip_down_for_resize(w, new_y, new_height, direction)
 
         #print(f'_win_resize_pixels_relative: from center')
 
