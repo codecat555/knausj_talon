@@ -3,9 +3,12 @@ Tools for managing window size and position.
 
 Continuous move/resize machinery adapted from mouse.py.
 """
+
+# WIP - can 'move center' motion be made smoother?
+# WIP - clean up carriage returns and trailing spaces
 # WIP - spurious stops occasionally break continuous operations
-# WIP - check all function arguments for correct type, e.g. int instead of float
-# WIP - rig 'move center' to move along a more direct line
+# WIP - x_steps should be int, and others
+# WIP - assign types to all variables
 # WIP - review _win_set_rect() return value handling it cross all instances
 # WIP - refactor into classes, move globals into class or instance variables
 
@@ -25,10 +28,10 @@ from talon.debug import log_exception
 Direction = Dict[str, bool]
 
 # turn debug messages on and off
-testing = True
+testing: bool = True
 
 # remember the last window for use by the 'win revert' command
-last_window: Dict = None
+last_window: Dict = dict()
 
 # globals used by the continuous move/resize commands
 continuous_move_width_increment = 0
@@ -40,6 +43,8 @@ continuous_resize_job = None
 continuous_direction = None
 continuous_old_rect = None
 continuous_mutex = threading.RLock()
+continuous_step_count = 0
+continuous_step_interval_x = continuous_step_interval_y = 0
 #
 # tag used to enable/disable commands used during window move/resize operations
 continuous_tag_name = 'window_tweak_running'
@@ -148,6 +153,7 @@ def _win_stop_gui(gui: imgui.GUI) -> None:
 def _win_move_continuous_helper() -> None:
     global continuous_move_width_increment, continuous_move_height_increment
     global continuous_mutex
+    global continuous_step_interval_x, continuous_step_interval_y, continuous_step_count
 
     with continuous_mutex:
         if not continuous_move_job:
@@ -158,8 +164,23 @@ def _win_move_continuous_helper() -> None:
         #     print(f'win_move_continuous_helper: current thread = {threading.get_native_id()}')
 
         w = ui.active_window()
+
+        if testing:
+            print(f'win_move_continuous_helper: {continuous_step_count}')
+
         if round(continuous_move_width_increment) or round(continuous_move_height_increment):
-            result, horizontal_limit_reached, vertical_limit_reached = _win_move_pixels_relative(w, continuous_move_width_increment, continuous_move_height_increment, continuous_direction)
+            delta_width = delta_height = 0
+            if continuous_step_interval_x == 0 or (continuous_step_count % continuous_step_interval_x == 0):
+                if testing:
+                    print(f'win_move_continuous_helper: stepping horizontally')
+                delta_width = continuous_move_width_increment
+
+            if continuous_step_interval_y == 0 or (continuous_step_count % continuous_step_interval_y == 0):
+                if testing:
+                    print(f'win_move_continuous_helper: stepping vertically')
+                delta_height = continuous_move_height_increment
+            
+            result, horizontal_limit_reached, vertical_limit_reached = _win_move_pixels_relative(w, delta_width, delta_height, continuous_direction)
             if not result or (horizontal_limit_reached and vertical_limit_reached):
                 if testing:
                     print(f'_win_move_continuous_helper: window move is complete. {w.rect=}')
@@ -171,6 +192,8 @@ def _win_move_continuous_helper() -> None:
 
                 if vertical_limit_reached:
                     continuous_move_height_increment = 0
+
+                continuous_step_count += 1
         else:
             # move increments are both zero, nothing to do...so stop
             if testing:
@@ -243,6 +266,7 @@ def _win_resize_continuous_helper() -> None:
 def _reset_continuous_flags() -> None:
     global continuous_move_width_increment, continuous_move_height_increment, continuous_resize_width_increment, continuous_resize_height_increment, continuous_move_job, continuous_move_job, continuous_resize_job
     global continuous_direction, continuous_old_rect
+    global continuous_step_interval_x, continuous_step_interval_y, continuous_step_count
 
     with continuous_mutex:
         # globals used by the continuous move/resize commands
@@ -254,6 +278,7 @@ def _reset_continuous_flags() -> None:
         continuous_resize_job = None
         continuous_direction = None
         continuous_old_rect = None
+        continuous_step_count = continuous_step_interval_x = continuous_step_interval_y = 0
 
 def _start_move() -> None:
     global continuous_move_job
@@ -292,6 +317,56 @@ def _win_move_continuous(w: ui.Window, direction: Direction) -> None:
 
         if testing:
             print(f'_win_move_continuous: {continuous_move_width_increment=}, {continuous_move_height_increment=}')
+
+        global continuous_step_interval_x, continuous_step_interval_y
+        direction_count = sum(direction.values())
+        if direction_count == 4:    # move to center (special case)
+            # figure out how to balance vertical and horizontal motion, to take a more direct path to the center
+
+            window_center = w.rect.center
+
+            screen = w.screen
+            screen_center = screen.visible_rect.center
+
+            # calculate distance between window center and screen center
+            # distance_x = screen_center.x - window_center.x
+            # distance_y = screen_center.y - window_center.y
+            distance_x = round(screen_center.x - window_center.x)
+            distance_y = round(screen_center.y - window_center.y)
+
+            if testing:
+                print(f"_win_move_pixels_relative: {distance_x=}")
+                print(f"_win_move_pixels_relative: {distance_y=}")
+            
+            x_steps = 0
+            if distance_x != 0:
+                x_steps = abs(distance_x // continuous_move_width_increment)
+
+            y_steps = 0
+            if distance_y != 0:
+                y_steps = abs(distance_y // continuous_move_height_increment)
+
+            if testing:
+                print(f"_win_move_pixels_relative: {x_steps=}")
+                print(f"_win_move_pixels_relative: {y_steps=}")
+
+            if x_steps != 0 and y_steps != 0:
+                # ratio = int(x_steps // y_steps)
+                ratio = x_steps // y_steps
+
+                if testing:
+                    print(f"_win_move_pixels_relative: {ratio=}")
+                    
+                if ratio == 0:
+                    # nothing to do
+                    pass
+                elif ratio > 1:
+                    continuous_step_interval_y = ratio
+                elif ratio < 1:
+                    continuous_step_interval_x = 1 / ratio
+
+                if testing:
+                    print(f"_win_move_pixels_relative: {continuous_step_interval_x=}, {continuous_step_interval_y=}")
 
         _start_move()
 
@@ -430,6 +505,10 @@ def _win_move_pixels_relative(w: ui.Window, delta_x: float, delta_y: float, dire
 
             target_x = screen_center.x - window_width/2
             target_y = screen_center.y - window_height/2
+
+            # calculate distance between window center and screen center
+            distance_x = screen_center.x - window_center.x
+            distance_y = screen_center.y - window_center.y
             
             if testing:
                 print(f'_win_move_pixels_relative: {new_x=}, {new_y=}, {screen_center.x=}, {screen_center.y=}')
@@ -437,21 +516,20 @@ def _win_move_pixels_relative(w: ui.Window, delta_x: float, delta_y: float, dire
 
             if (delta_x != 0):
                 if testing:
-                   print(f'_win_move_pixels_relative: {(screen_center.x - window_center.x)=}, {delta_x=}')
+                   print(f'_win_move_pixels_relative: {distance_x=}, {delta_x=}')
                    
-                if (delta_x < 0 and (screen_center.x - window_center.x >= delta_x)) or (delta_x > 0 and (screen_center.x - window_center.x <= delta_x)):
+                if (delta_x < 0 and (distance_x >= delta_x)) or (delta_x > 0 and (distance_x <= delta_x)):
                     # crossed center point, done moving horizontally
                     if testing:
                         print(f'_win_move_pixels_relative: crossed horizontal center point')
                     new_x = target_x
                     horizontal_limit_reached = True
 
-            # if (delta_y != 0) and ((y <= max_y and new_y >= max_y) or (y >= max_y and new_y <= max_y)):
             if delta_y != 0:
                 if testing:
-                   print(f'_win_move_pixels_relative: {(screen_center.y - window_center.y)=}, {delta_y=}')
+                   print(f'_win_move_pixels_relative: {distance_y=}, {delta_y=}')
                    
-                if (delta_y < 0 and (screen_center.y - window_center.y >= delta_y)) or (delta_y > 0 and (screen_center.y - window_center.y <= delta_y)):
+                if (delta_y < 0 and (distance_y >= delta_y)) or (delta_y > 0 and (distance_y <= delta_y)):
                     # crossed center point, done moving vertically
                     if testing:
                         print(f'_win_move_pixels_relative: crossed vertical center point')
@@ -484,7 +562,9 @@ def _win_move_pixels_relative(w: ui.Window, delta_x: float, delta_y: float, dire
         # if testing:
         #     print(f'_win_move_pixels_relative: after: {w.rect=}')
         if testing:
-            if 'rect' in last_window:
+            if not last_window:
+                print(f'_win_move_pixels_relative: last_window is empty after _win_set_rect(), which returned {result=}')
+            elif 'rect' in last_window:
                 old_rect = last_window["rect"]
                 delta_x = w.rect.x - old_rect.x
                 delta_y = w.rect.y - old_rect.y
@@ -522,7 +602,7 @@ def _get_component_dimensions(w: ui.Window, distance: float, direction: Directio
     rect = w.rect
     direction_count = sum(direction.values())
     if operation == 'move' and direction_count == 4:    # move to center
-        # this is a special case - 'move center' - we return signed values from this code
+        # this is a special case - 'move center' - we return signed values for this case
 
         rect, horizontal_multiplier, vertical_multiplier = _get_center_to_center_rect(w)
         magnitude = _get_diagonal_length(rect)
@@ -797,6 +877,10 @@ def _win_set_rect(w: ui.Window, rect_in: ui.Rect) -> bool:
         if event_count == 0:
             # no real work to do
             result = True
+
+            if testing:
+                print('_win_set_rect: nothing to do, window already matches given rect.')
+                
             break
 
         w.rect = rect_in
@@ -1123,7 +1207,9 @@ def _win_show(gui: imgui.GUI) -> None:
     gui.spacer()
 
     #gui.text(f"Name: {screen.name}")
-    #gui.text(f"DPI: {screen.dpi}")
+    # gui.text(f"DPI: {screen.dpi}")
+    # gui.text(f"DPI_x: {screen.dpi_x}")
+    # gui.text(f"DPI_y: {screen.dpi_y}")
     #gui.text(f"Scale: {screen.scale}")
     #gui.spacer()
 
