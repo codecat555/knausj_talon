@@ -4,6 +4,7 @@ Tools for managing window size and position.
 Continuous move/resize machinery adapted from mouse.py.
 """
 
+# WIP - redo change 845dba7 to include new file
 # WIP - can 'move center' motion be made smoother?
 # WIP - clean up carriage returns and trailing spaces
 # WIP - spurious stops occasionally break continuous operations
@@ -313,7 +314,9 @@ def _win_move_continuous(w: ui.Window, direction: Direction) -> None:
 
         continuous_old_rect = w.rect
 
-        continuous_move_width_increment, continuous_move_height_increment = _get_continuous_parameters(w, settings.get('user.win_continuous_move_rate'), direction, 'move')
+        frequency = float((settings.get('user.win_move_frequency'))[:-2])
+        rate = settings.get('user.win_continuous_move_rate')
+        continuous_move_width_increment, continuous_move_height_increment = _get_continuous_parameters(w, rate, direction, 'move', frequency)
 
         if testing:
             print(f'_win_move_continuous: {continuous_move_width_increment=}, {continuous_move_height_increment=}')
@@ -382,7 +385,9 @@ def _win_resize_continuous(w: ui.Window, multiplier: int, direction: Optional[Di
             logging.warning('cannot start a resize job when one is already running')
             return
 
-        continuous_resize_width_increment, continuous_resize_height_increment = _get_continuous_parameters(w, settings.get('user.win_continuous_resize_rate'), direction, '_resize')
+        frequency = float((settings.get('user.win_resize_frequency'))[:-2])
+        rate = settings.get('user.win_continuous_resize_rate')
+        continuous_resize_width_increment, continuous_resize_height_increment = _get_continuous_parameters(w, rate, direction, '_resize', frequency)
 
         # apply multiplier to control whether we're stretching or shrinking
         continuous_resize_width_increment *= multiplier
@@ -605,7 +610,7 @@ def _get_component_dimensions(w: ui.Window, distance: float, direction: Directio
         # this is a special case - 'move center' - we return signed values for this case
 
         rect, horizontal_multiplier, vertical_multiplier = _get_center_to_center_rect(w)
-        magnitude = _get_diagonal_length(rect)
+        diagonal_length = _get_diagonal_length(rect)
 
         window_center = w.rect.center
 
@@ -613,11 +618,11 @@ def _get_component_dimensions(w: ui.Window, distance: float, direction: Directio
         screen_center = screen.visible_rect.center
 
         # from https://math.stackexchange.com/questions/175896/finding-a-point-along-a-line-a-certain-distance-away-from-another-point
-        ratio_of_differences = distance / magnitude
+        ratio_of_differences = distance / diagonal_length
         new_x = (((1 - ratio_of_differences) * window_center.x) + (ratio_of_differences * screen_center.x))
         new_y = (((1 - ratio_of_differences) * window_center.y) + (ratio_of_differences * screen_center.y))
 
-        print(f"_get_component_dimensions: {magnitude=}, {new_x=}, {new_y=}\n")
+        print(f"_get_component_dimensions: {diagonal_length=}, {new_x=}, {new_y=}\n")
 
         delta_width = abs(new_x - window_center.x) * horizontal_multiplier
         delta_height = abs(new_y - window_center.y) * vertical_multiplier
@@ -634,8 +639,8 @@ def _get_component_dimensions(w: ui.Window, distance: float, direction: Directio
             print(f"_get_component_dimensions: y steps={y_steps}")
     else:
         if direction_count > 1:    # diagonal
-            magnitude = _get_diagonal_length(rect)
-            ratio = distance / magnitude
+            diagonal_length = _get_diagonal_length(rect)
+            ratio = distance / diagonal_length
             delta_width = rect.width * ratio
             delta_height = rect.height * ratio
         else:  # horizontal or vertical
@@ -669,11 +674,11 @@ def _get_component_dimensions_by_percent(w: ui.Window, percent: float, direction
 
     return _get_component_dimensions(w, distance, direction, operation)
 
-def _get_continuous_parameters(w: ui.Window, rate_cps: float, direction: Direction, operation: str) -> Tuple[int, int]:
+def _get_continuous_parameters(w: ui.Window, rate_cps: float, direction: Direction, operation: str, frequency: str) -> Tuple[int, int]:
     if testing:
-        print(f'_get_continuous_move_parameters: {rate_cps=}')
+        print(f'_get_continuous_parameters: {rate_cps=}')
 
-    # convert rate to inches to match dpi measure
+    # convert rate from centimeters to inches, to match dpi units
     rate_ips = rate_cps / 2.54
 
     dpi_x = w.screen.dpi_x
@@ -683,38 +688,44 @@ def _get_continuous_parameters(w: ui.Window, rate_cps: float, direction: Directi
     dpms_x = (rate_ips * dpi_x) / 1000
     dpms_y = (rate_ips * dpi_y) / 1000
 
-    move_frequency = float((settings.get('user.win_move_frequency'))[:-2])
+    if testing:
+        print(f'_get_continuous_parameters: {dpms_x=}, {dpms_y=}')
 
-    move_width_increment = move_height_increment = 0
+    width_increment = height_increment = 0
 
     direction_count = sum(direction.values())
     if operation == 'move' and direction_count == 4:    # move to center
         if testing:
             print(f"_get_continuous_parameters: 'move center' special case")
 
-        move_width_increment = dpms_x * move_frequency
-        move_height_increment = dpms_y * move_frequency
+        # balance vertical and horizontal motion, to take a more direct path to the center
+        width_increment = dpms_x * frequency
+        height_increment = dpms_y * frequency
+
+        if testing:
+                print(f"_get_continuous_parameters: initial values: {width_increment=}, {height_increment=}")
+
 
         # special case, return signed values
         if w.rect.center.x > w.screen.rect.center.x:
-            move_width_increment *= -1
+            width_increment *= -1
         #
         if w.rect.center.y > w.screen.rect.center.y:
-            move_height_increment *= -1
-    elif direction_count > 1:    # move to center
-        move_width_increment = dpms_x * move_frequency
-        move_height_increment = dpms_y * move_frequency
+            height_increment *= -1
+    elif direction_count > 1:    # diagonal
+        width_increment = dpms_x * frequency
+        height_increment = dpms_y * frequency
     else:
         # single direction
         if direction["left"] or direction["right"]:
-            move_width_increment = dpms_x * move_frequency
+            width_increment = dpms_x * frequency
         elif direction["up"] or direction["down"]:
-            move_height_increment = dpms_y * move_frequency
+            height_increment = dpms_y * frequency
 
     if testing:
-        print(f"_get_continuous_parameters: returning {move_width_increment=}, {move_height_increment=}")
+        print(f"_get_continuous_parameters: returning {width_increment=}, {height_increment=}")
 
-    return move_width_increment, move_height_increment
+    return width_increment, height_increment
 
 # note: this method is used by win_move_absolute(), which interprets the Direction
 # argument differently than elsewhere in this module.
