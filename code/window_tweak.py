@@ -5,7 +5,6 @@ Continuous move/resize machinery adapted from mouse.py.
 """
 
 # WIP - redo change 845dba7 to include new file
-# WIP - can 'move center' motion be made smoother?
 # WIP - clean up carriage returns and trailing spaces
 # WIP - spurious stops occasionally break continuous operations
 # WIP - x_steps should be int, and others
@@ -20,6 +19,8 @@ import queue
 import logging
 import sys
 import threading
+# WIP - how did this get here?
+# from code.create_spoken_forms import T
 
 from talon import ui, Module, Context, actions, speech_system, ctrl, imgui, cron, settings, app, registry
 from talon.types.point import Point2d
@@ -29,7 +30,7 @@ from talon.debug import log_exception
 Direction = Dict[str, bool]
 
 # turn debug messages on and off
-testing: bool = True
+testing: bool = False
 
 # remember the last window for use by the 'win revert' command
 last_window: Dict = dict()
@@ -44,12 +45,20 @@ continuous_resize_job = None
 continuous_direction = None
 continuous_old_rect = None
 continuous_mutex = threading.RLock()
-continuous_step_count = 0
-continuous_step_interval_x = continuous_step_interval_y = 0
+
+use_line_slope = False
+continuous_initial_x = None
+continuous_initial_y = None
+continuous_final_x = None
+continuous_final_y = None
 #
 # tag used to enable/disable commands used during window move/resize operations
 continuous_tag_name = 'window_tweak_running'
 continuous_tag_name_qualified = 'user.' + continuous_tag_name
+#
+use_bresenham = False
+use_walking_bresenham = True
+continuous_bres = None
 
 mod = Module()
 
@@ -144,6 +153,84 @@ def compass_direction(m: List) -> Direction:
 
     return result
 
+##########
+# Bresenham line code, from
+#       https://github.com/encukou/bresenham/blob/master/bresenham.py
+##########
+def bresenham(x0, y0, x1, y1):
+    """Yield integer coordinates on the line from (x0, y0) to (x1, y1).
+
+    Input coordinates should be integers.
+
+    The result will contain both the start and the end point.
+    """
+    dx = x1 - x0
+    dy = y1 - y0
+
+    xsign = 1 if dx > 0 else -1
+    ysign = 1 if dy > 0 else -1
+
+    dx = abs(dx)
+    dy = abs(dy)
+
+    if dx > dy:
+        xx, xy, yx, yy = xsign, 0, 0, ysign
+    else:
+        dx, dy = dy, dx
+        xx, xy, yx, yy = 0, ysign, xsign, 0
+
+    D = 2*dy - dx
+    y = 0
+
+    for x in range(dx + 1):
+        yield x0 + x*xx + y*yx, y0 + x*xy + y*yy
+        if D >= 0:
+            y += 1
+            D -= 2*dx
+        D += 2*dy
+
+def _get_line_height_at(x0, y0, x1, y1, x) -> int:
+    """
+    A modified bresenham implementation that returns the y value corresponding
+    to the given x value.
+
+    Based on Bresenham line code from
+        https://github.com/encukou/bresenham/blob/master/bresenham.py
+    """
+    dx = x1 - x0
+    dy = y1 - y0
+
+    # xsign = 1 if dx > 0 else -1
+    # ysign = 1 if dy > 0 else -1
+
+    dx = abs(dx)
+    dy = abs(dy)
+
+    # if dx > dy:
+    #     xx, xy, yx, yy = xsign, 0, 0, ysign
+    # else:
+    #     dx, dy = dy, dx
+    #     xx, xy, yx, yy = 0, ysign, xsign, 0
+
+    # D = 2*dy - dx
+
+    # for x in range(dx + 1):
+    #     yield x0 + x*xx + y*yx, y0 + x*xy + y*yy
+    #     if D >= 0:
+    #         y += 1
+    #         D -= 2*dx
+    #     D += 2*dy
+
+    slope = dy / dx
+
+    intercept_y = y0 - (slope * x0)    
+
+    # rounding here puts the y value on the grid (rather than between grid points)
+    y = round((slope * x) + intercept_y)
+
+    return y 
+#######
+
 @imgui.open(y=0)
 def _win_stop_gui(gui: imgui.GUI) -> None:
     gui.text(f"Say 'win stop' or click below.")
@@ -154,11 +241,26 @@ def _win_stop_gui(gui: imgui.GUI) -> None:
 def _win_move_continuous_helper() -> None:
     global continuous_move_width_increment, continuous_move_height_increment
     global continuous_mutex
-    global continuous_step_interval_x, continuous_step_interval_y, continuous_step_count
+
+    def _move_it(w: ui.Window, delta_x: float, delta_y: float, direction: Direction) -> Tuple[bool, bool, bool]:
+        result, horizontal_limit_reached, vertical_limit_reached = _win_move_pixels_relative(w, delta_x, delta_y, continuous_direction)
+        if not result or (horizontal_limit_reached and vertical_limit_reached):
+            if testing:
+                print(f'_win_move_continuous_helper: window move is complete. {w.rect=}')
+            _win_stop()
+            return False
+        else:
+            if horizontal_limit_reached:
+                continuous_move_width_increment = 0
+
+            if vertical_limit_reached:
+                continuous_move_height_increment = 0
+
+        return True
 
     with continuous_mutex:
         if not continuous_move_job:
-            # seems sometimes this gets called while the job is being canceled, so just return that case
+            # seems sometimes this gets called while the job is being canceled, so just return in that case
             return
 
         # if testing:
@@ -167,41 +269,155 @@ def _win_move_continuous_helper() -> None:
         w = ui.active_window()
 
         if testing:
-            print(f'win_move_continuous_helper: {continuous_step_count}')
+            print(f'win_move_continuous_helper: starting {w.rect=}')
 
         if round(continuous_move_width_increment) or round(continuous_move_height_increment):
-            delta_width = delta_height = 0
-            if continuous_step_interval_x == 0 or (continuous_step_count % continuous_step_interval_x == 0):
-                if testing:
-                    print(f'win_move_continuous_helper: stepping horizontally')
-                delta_width = continuous_move_width_increment
+            direction_count = sum(continuous_direction.values())
+            if direction_count != 4:
+            # if direction_count == 1:
+                _move_it(w, continuous_move_width_increment, continuous_move_height_increment, continuous_direction)
+            else:    # move to center (special case)
+                if use_walking_bresenham:
+                    initial_x = w.rect.x
+                    initial_y = w.rect.y
+                    win_move_target_width = continuous_move_width_increment
+                    win_move_target_height = continuous_move_height_increment
+                    cumulative_delta_x = cumulative_delta_y = 0    
+                    center_x = center_y = 0                
+                    while win_move_target_width != 0 and win_move_target_height != 0:
+                        try:
+                            center_x, center_y = next(continuous_bres)
+                            # translate center coordinates to top left
+                            # x = round(center_x - (w.rect.width // 2))
+                            # y = round(center_y - (w.rect.height // 2))
+                            x, y = _translate_top_left_by_region_for_move(w, center_x, center_y, continuous_direction)
+                            x = round(x)
+                            y = round(y)
+                            if testing:
+                                    print(f'win_move_continuous_helper: next bresenham point = {center_x, center_y}, corresponding to top left = {x, y}')
+                                    print(f'win_move_continuous_helper: current window top left = {w.rect.x, w.rect.y}')
+                            while (x, y) == (round(w.rect.x), round(w.rect.y)):
+                                center_x, center_y = next(continuous_bres)
+                                # translate center coordinates to top left
+                                # x = round(center_x - (w.rect.width // 2))
+                                # y = round(center_y - (w.rect.height // 2))
+                                x, y = _translate_top_left_by_region_for_move(w, center_x, center_y, continuous_direction)
+                                x = round(x)
+                                y = round(y)
+                                if testing:
+                                    print(f'win_move_continuous_helper: skipped to next bresenham point = {center_x, center_y}, corresponding to top left = {x, y}')
+                        except StopIteration:
+                            if testing:
+                                print(f'win_move_continuous_helper: StopIteration')
+                            
+                            _win_stop()
+                            raise
+                            
+                        delta_x = abs(x - w.rect.x)
+                        if continuous_move_width_increment < 0:
+                            delta_x *= -1
 
-            if continuous_step_interval_y == 0 or (continuous_step_count % continuous_step_interval_y == 0):
-                if testing:
-                    print(f'win_move_continuous_helper: stepping vertically')
-                delta_height = continuous_move_height_increment
-            
-            result, horizontal_limit_reached, vertical_limit_reached = _win_move_pixels_relative(w, delta_width, delta_height, continuous_direction)
-            if not result or (horizontal_limit_reached and vertical_limit_reached):
-                if testing:
-                    print(f'_win_move_continuous_helper: window move is complete. {w.rect=}')
-                _win_stop()
-                return
-            else:
-                if horizontal_limit_reached:
-                    continuous_move_width_increment = 0
+                        delta_y = abs(y - w.rect.y)
+                        if continuous_move_height_increment < 0:
+                            delta_y *= -1
+                        
+                        if testing:
+                            print(f'win_move_continuous_helper: stepping from {w.rect.x, w.rect.y} to {x, y}, {delta_x=}, {delta_y=}')
 
-                if vertical_limit_reached:
-                    continuous_move_height_increment = 0
+                        if not _move_it(w, delta_x, delta_y, continuous_direction):
+                            if testing:
+                                print(f'win_move_continuous_helper: stopped at {w.rect=}')
+                            return
 
-                continuous_step_count += 1
+                        # if (center_x, center_y) == (continuous_final_x, continuous_final_y):
+                        #     # move increments are both zero, nothing to do...so stop
+                        #     if testing:
+                        #         print(f'_win_move_continuous_helper: reached target point')
+                        #     _win_stop()
+                        #     return
+
+                        cumulative_delta_x = abs(w.rect.x - initial_x)
+                        if testing:
+                            print(f'win_move_continuous_helper: {cumulative_delta_x=}, {win_move_target_width=}')
+                        if win_move_target_width != 0 and cumulative_delta_x >= abs(win_move_target_width):
+                            if testing:
+                                print(f'win_move_continuous_helper: reached horizontal limit, stopping')
+                            win_move_target_width = 0
+                            break
+                        
+                        cumulative_delta_y = abs(w.rect.y - initial_y)
+                        if testing:
+                            print(f'win_move_continuous_helper: {cumulative_delta_y=}, {win_move_target_height=}')
+                        if win_move_target_height != 0 and cumulative_delta_y >= abs(win_move_target_height):
+                            if testing:
+                                print(f'win_move_continuous_helper: reached vertical limit, stopping')
+                            win_move_target_height = 0
+                            break
+
+                        # if win_move_target_width == 0 and win_move_target_height == 0:
+                        #     break
+                # elif use_bresenham:
+                #     while (round(continuous_move_width_increment) or round(continuous_move_height_increment)):
+                #         try:
+                #             x, y = next(continuous_bres)
+                #         except StopIteration:
+                #             if testing:
+                #                 print(f'win_move_continuous_helper: StopIteration')
+                #             raise
+
+                #         delta_x = abs(x - w.rect.x)
+                #         if continuous_move_width_increment < 0:
+                #             delta_x *= -1
+
+                #         delta_y = abs(y - w.rect.y)
+                #         if continuous_move_height_increment < 0:
+                #             delta_y *= -1
+
+                #         if testing:
+                #             print(f'win_move_continuous_helper: stepping from {w.rect.x=}, {w.rect.y=} to {x, y}, {delta_x=}, {delta_y=}')
+                            
+                #         if not _move_it(w, delta_x, delta_y, continuous_direction):
+                #             print(f'win_move_continuous_helper: stopped at {w.rect=}')
+                #             return
+                # elif use_line_slope:
+                #     delta_x = delta_y = 0
+                #     if use_line_slope:
+                #         delta_x = continuous_move_width_increment
+                #         x = w.rect.x + delta_x
+
+                #         y = _get_line_height_at(continuous_initial_x, continuous_initial_y, continuous_final_x, continuous_final_y, x)
+                #         delta_y = abs(w.rect.y - y)
+                #         if continuous_move_height_increment < 0:
+                #             delta_y *= -1
+
+                #         if testing:
+                #             print(f'win_move_continuous_helper: stepping from {w.rect.x=}, {w.rect.y=}, {continuous_move_width_increment=}, {delta_y=}')
+
+                #         # _move_it(w, continuous_move_width_increment, delta_y, continuous_direction)                            
+                    
+                #     if testing:
+                #         print(f'win_move_continuous_helper: moving to {x, y}')
+
+                #     # delta_x = x - w.rect.x
+                #     # delta_y = y - w.rect.y
+                #     _move_it(w, delta_x, delta_y, continuous_direction)
         else:
             # move increments are both zero, nothing to do...so stop
             if testing:
                 print(f'_win_move_continuous_helper: width and height increments are both zero, nothing to do, {w.rect=}')
             _win_stop()
-            return
-
+        
+        # WIP - needs re-placement
+        # # for testing
+        # one_loop_only = False
+        # if one_loop_only:
+        #     print(f'_win_move_continuous_helper: debugging option enabled, ending move after one iteration')
+        #     _win_stop()
+            
+        if testing:
+            print(f'win_move_continuous_helper: iteration done')
+        return
+                        
 def _win_resize_continuous_helper() -> None:
     global continuous_resize_width_increment, continuous_resize_height_increment
     global continuous_mutex
@@ -267,7 +483,7 @@ def _win_resize_continuous_helper() -> None:
 def _reset_continuous_flags() -> None:
     global continuous_move_width_increment, continuous_move_height_increment, continuous_resize_width_increment, continuous_resize_height_increment, continuous_move_job, continuous_move_job, continuous_resize_job
     global continuous_direction, continuous_old_rect
-    global continuous_step_interval_x, continuous_step_interval_y, continuous_step_count
+    global continuous_initial_x, continuous_initial_y, continuous_final_x, continuous_final_y
 
     with continuous_mutex:
         # globals used by the continuous move/resize commands
@@ -279,7 +495,14 @@ def _reset_continuous_flags() -> None:
         continuous_resize_job = None
         continuous_direction = None
         continuous_old_rect = None
-        continuous_step_count = continuous_step_interval_x = continuous_step_interval_y = 0
+        if use_bresenham or use_walking_bresenham:
+            continuous_bres = None
+        elif use_line_slope:
+            continuous_initial_x = None
+            continuous_initial_y = None
+            continuous_final_x = None
+            continuous_final_y = None
+# WIP - make sure above matches declarations at top
 
 def _start_move() -> None:
     global continuous_move_job
@@ -299,9 +522,67 @@ def _start_resize() -> None:
         ctx.tags = [continuous_tag_name_qualified]
         continuous_resize_job = cron.interval(settings.get('user.win_resize_frequency'), _win_resize_continuous_helper)
 
+def _get_screen_edge_midpoint(screen: ui.Screen, direction: Direction) -> Tuple[float, float]:
+    x = y = None
+    
+    direction_count = sum(direction.values())
+    if direction_count == 1:
+        if direction['left']: # west
+            x = screen.rect.x
+            y = (screen.rect.y + screen.rect.height) // 2
+        elif direction['up']: # north
+            x = (screen.rect.x + screen.rect.width) // 2
+            y = screen.rect.y
+        elif direction['right']: # east
+            x = screen.rect.x + screen.rect.width
+            y = (screen.rect.y + screen.rect.height) // 2
+        elif direction['down']: # south
+            x = (screen.rect.x + screen.rect.width) // 2
+            y = screen.rect.y + screen.rect.height
+
+    return x, y
+        
+def _get_screen_corner(screen: ui.Screen, direction: Direction) -> Tuple[float, float]:
+    x = y = None
+
+    direction_count = sum(direction.values())
+    if direction_count == 2:
+        if direction['left'] and direction['up']: # northwest
+            x = screen.rect.x
+            y = screen.rect.y
+        elif direction['right'] and direction['up']: # northeast
+            x = screen.rect.x + screen.rect.width
+            y = screen.rect.y
+        elif direction['right'] and direction['down']: # southeast
+            x = screen.rect.x + screen.rect.width
+            y = screen.rect.y + screen.rect.height
+        elif direction['left'] and direction['down']: # southwest
+            x = screen.rect.x
+            y = screen.rect.y + screen.rect.height
+
+    return x, y
+    
+def _get_screen_center(screen: ui.Screen) -> Tuple[float, float]:
+    return screen.visible_rect.center.x, screen.visible_rect.center.y
+
+def _get_target_point(w: ui.Window, direction: Direction) -> Tuple[int, int]:
+    screen = w.screen
+    target_x = target_y = None
+
+    direction_count = sum(direction.values())
+    if direction_count == 1:    # horizontal or vertical
+        target_x, target_y = _get_screen_edge_midpoint(screen, direction)
+    elif direction_count == 2:    # diagonal
+        target_x, target_y = _get_screen_corner(screen, direction)
+    elif direction_count == 4:    # center
+        target_x, target_y = _get_screen_center(screen)
+
+    return round(target_x), round(target_y)
+
 def _win_move_continuous(w: ui.Window, direction: Direction) -> None:
     global continuous_move_width_increment, continuous_move_height_increment, continuous_direction, continuous_old_rect
-    global continuous_mutex
+    global continuous_mutex, continuous_bres
+    global continuous_initial_x, continuous_initial_y, continuous_final_x, continuous_final_y
 
     with continuous_mutex:
         if continuous_move_job:
@@ -321,55 +602,32 @@ def _win_move_continuous(w: ui.Window, direction: Direction) -> None:
         if testing:
             print(f'_win_move_continuous: {continuous_move_width_increment=}, {continuous_move_height_increment=}')
 
-        global continuous_step_interval_x, continuous_step_interval_y
-        direction_count = sum(direction.values())
-        if direction_count == 4:    # move to center (special case)
-            # figure out how to balance vertical and horizontal motion, to take a more direct path to the center
+        direction_count = sum(continuous_direction.values())
+        if direction_count == 4:    # move to center (special case)        
+        # if direction_count > 1:    # move to center (special case)        
+            # follow path from window center to screen center
+            x0 = round(w.rect.center.x)
+            y0 = round(w.rect.center.y)
 
-            window_center = w.rect.center
+            x1, y1 = _get_target_point(w, direction)
 
-            screen = w.screen
-            screen_center = screen.visible_rect.center
-
-            # calculate distance between window center and screen center
-            # distance_x = screen_center.x - window_center.x
-            # distance_y = screen_center.y - window_center.y
-            distance_x = round(screen_center.x - window_center.x)
-            distance_y = round(screen_center.y - window_center.y)
-
-            if testing:
-                print(f"_win_move_pixels_relative: {distance_x=}")
-                print(f"_win_move_pixels_relative: {distance_y=}")
-            
-            x_steps = 0
-            if distance_x != 0:
-                x_steps = abs(distance_x // continuous_move_width_increment)
-
-            y_steps = 0
-            if distance_y != 0:
-                y_steps = abs(distance_y // continuous_move_height_increment)
-
-            if testing:
-                print(f"_win_move_pixels_relative: {x_steps=}")
-                print(f"_win_move_pixels_relative: {y_steps=}")
-
-            if x_steps != 0 and y_steps != 0:
-                # ratio = int(x_steps // y_steps)
-                ratio = x_steps // y_steps
-
+            x = x_prev = x0
+            y = y_prev = y0
+                
+            if use_bresenham or use_walking_bresenham:
+                # note that this is based on the line from window center to screen center, resulting coordinates
+                # we'll have to be translated to top left to set window position, etc0.
+                continuous_bres = bresenham(x0, y0, x1, y1)
+                # continuous_bres = bresenham_mod(x0, y0, x1, y1, round(continuous_move_width_increment), round(continuous_move_height_increment))
+                # discard initial point (we're already there)
+                first = next(continuous_bres)
                 if testing:
-                    print(f"_win_move_pixels_relative: {ratio=}")
-                    
-                if ratio == 0:
-                    # nothing to do
-                    pass
-                elif ratio > 1:
-                    continuous_step_interval_y = ratio
-                elif ratio < 1:
-                    continuous_step_interval_x = 1 / ratio
-
-                if testing:
-                    print(f"_win_move_pixels_relative: {continuous_step_interval_x=}, {continuous_step_interval_y=}")
+                    print(f'_win_move_continuous: first bresenham point {first=}')
+            # elif use_line_slope:
+            continuous_initial_x = x0
+            continuous_initial_y = y0
+            continuous_final_x = x1
+            continuous_final_y = y1
 
         _start_move()
 
@@ -517,7 +775,7 @@ def _win_move_pixels_relative(w: ui.Window, delta_x: float, delta_y: float, dire
             
             if testing:
                 print(f'_win_move_pixels_relative: {new_x=}, {new_y=}, {screen_center.x=}, {screen_center.y=}')
-                print(f'_win_move_pixels_relative: {target_x=}, {target_y=}')
+                print(f'_win_move_pixels_relative: top left - {target_x=}, {target_y=}')
 
             if (delta_x != 0):
                 if testing:
@@ -695,16 +953,26 @@ def _get_continuous_parameters(w: ui.Window, rate_cps: float, direction: Directi
 
     direction_count = sum(direction.values())
     if operation == 'move' and direction_count == 4:    # move to center
+    # if direction_count > 1:    # move to center
         if testing:
             print(f"_get_continuous_parameters: 'move center' special case")
 
-        # balance vertical and horizontal motion, to take a more direct path to the center
+        # # balance vertical and horizontal motion, to take a more direct path to the center
+
+        # # first, figure out the diagonal distance to travel per ms
+        # # dpi_c = math.sqrt((dpi_x ** 2) + (dpi_y ** 2))
+        # dpi_c = w.screen.dpi
+        # dpms_c = (rate_ips * dpi_c) / 1000
+        # diagonal_increment = dpms_c * frequency
+
+        # if testing:
+        #     print(f"_get_continuous_parameters: {dpi_c=}, {dpms_c=}, {diagonal_increment=}")
+
+        # # get corresponding changes in width and height
+        # width_increment, height_increment = _get_component_dimensions(w, diagonal_increment, direction, operation)
+        
         width_increment = dpms_x * frequency
         height_increment = dpms_y * frequency
-
-        if testing:
-                print(f"_get_continuous_parameters: initial values: {width_increment=}, {height_increment=}")
-
 
         # special case, return signed values
         if w.rect.center.x > w.screen.rect.center.x:
@@ -1186,7 +1454,8 @@ def _win_resize_pixels_relative(w: ui.Window, delta_width: float, delta_height: 
 
     return result, resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached
 
-@imgui.open(y=0)
+# @imgui.open(y=0)
+@imgui.open(x=4000,y=244)
 def _win_show(gui: imgui.GUI) -> None:
     w = ui.active_window()
 
@@ -1269,6 +1538,22 @@ def _win_show(gui: imgui.GUI) -> None:
     if gui.button("Close"):
         _win_show.hide()
 
+def _win_test_bresenham_1():
+    x0 = 0
+    y0 = 0
+    x1 = 100
+    y1 = 4
+    max_width = 4
+    max_height = 4
+
+    bres = bresenham(x0, y0, x1, y1)
+    try:
+        while True:
+            b0 = next(bres)
+            print(f'_win_test_bresenham_1: bresenham: {b0}')
+    except StopIteration:
+        print(f'_win_test_bresenham_1: bresenham done')    
+        
 @mod.action_class
 class Actions:
     def win_show() -> None:
@@ -1426,6 +1711,12 @@ class Actions:
             if testing:
                 print(f'win_revert: reverting size and/or position for {last_window}')
             _win_set_rect(w, last_window['rect'])
+
+    def win_test_bresenham(num: int) -> None:
+        "test modified bresenham algo"
+
+        if num == 1:
+            _win_test_bresenham_1()
 
 @ctx_stop.action_class("user")
 class WindowTweakActions:
