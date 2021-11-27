@@ -10,10 +10,10 @@ win hide$:
 # executed, would then restore the original mode after stopping the move/resize operation.
 win stop$:
     user.win_stop()
-    
+
 win move <user.compass_direction>$:
     user.win_move(compass_direction)
-    
+
 win move <user.compass_direction> <number> percent$:
     user.win_move_percent(number, compass_direction)
 
@@ -37,7 +37,7 @@ win stretch <user.compass_direction>$:
 
 win stretch <user.compass_direction> <number> percent$:
     user.win_resize_percent(number, compass_direction)
-    
+
 win stretch <user.compass_direction> <number> pixels$:
     user.win_resize_pixels(number, compass_direction)
 
@@ -49,7 +49,7 @@ win shrink <user.compass_direction>$:
 
 win shrink <user.compass_direction> <number> percent$:
     user.win_resize_percent(-1 * number, compass_direction)
-    
+
 win shrink <user.compass_direction> <number> pixels$:
     user.win_resize_pixels(-1 * number, compass_direction)
 

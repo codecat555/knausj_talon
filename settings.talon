@@ -58,7 +58,7 @@ settings():
 
     # When enabled, the 'Move/Resize Window' GUI will not be shown for continuous move operations
     user.win_hide_move_gui = 0
-         
+
     # The update frequency used when resizing a window continuously
     user.win_resize_frequency = "30ms"
 
@@ -71,7 +71,7 @@ settings():
     # How long to wait (in seconds) for talon to signal completion of window move/resize requests
     user.win_set_queue_timeout = 0.2
 
-    # How many times to retry a timed out talon window move/resize request 
+    # How many times to retry a timed out talon window move/resize request
     user.win_set_retries = 1
 
     # Whether to generate a warning when the result of a window move or resize request does
