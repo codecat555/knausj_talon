@@ -4,6 +4,47 @@ Tools for managing window size and position.
 Continuous move/resize machinery adapted from mouse.py.
 """
 
+# WIP - what's up with this error? started putty and tried to move the window...noticed then that the window
+# WIP - was not actually focused anymore for some reason and the move worked after clicking on the window.
+# WIP - oh, I started putty just after testing the 'draft all' command followed by 'draft submit' (to slack),
+# WIP - maybe that had something to do with it also...?
+# WIP - Oddly, the line numbers shown below are not accurate...for instance, the code shown for line 1174
+# WIP - is actually at line 1213.
+# 
+# 2021-11-27 09:32:48    IO 'win move north'
+# 2021-11-27 09:32:48    IO [audio]=1650.000ms [compile]=465.150ms [emit]=53.720ms [decode]=1.138ms [total]=520.008ms
+# 2021-11-27 09:32:48    IO _get_continuous_parameters: rate_cps=4.5
+# 2021-11-27 09:32:48    IO _get_continuous_parameters: dpms_x=0.192, dpms_y=0.19058823529411761
+# 2021-11-27 09:32:48    IO _get_continuous_parameters: returning width_increment=0, height_increment=4.76470588235294
+# 2021-11-27 09:32:48    IO _win_move_continuous: continuous_move_width_increment=0, continuous_move_height_increment=4.76470588235294
+# 2021-11-27 09:32:48    IO win_move_continuous_helper: starting w.rect=Rect(1340, 952, 110, 28)
+# 2021-11-27 09:32:48    IO _win_move_pixels_relative: delta_x=0, delta_y=4.76470588235294, x=1340, y=952
+# 2021-11-27 09:32:48    IO _win_set_rect: starting...
+# 2021-11-27 09:32:48 ERROR cron interval error <function _win_move_continuous_helper at 0x00000000ECD19550>
+#    13:                           threading.py:930 * # cron thread
+#    12:                           threading.py:973 *
+#    11:                           threading.py:910 *
+#    10:                          talon\cron.py:155 |
+#     9:                          talon\cron.py:103 |
+#     8:                talon\scripting\rctx.py:233 | # 'cron' user.knausj_talon.code.window_tweak:call()
+#     7:                          talon\cron.py:178 | # [stack splice]
+#     6: user\knausj_talon\code\window_tweak.py:280 | _move_it(w, continuous_move_width_incr..
+#     5: user\knausj_talon\code\window_tweak.py:248 | result, horizontal_limit_reached, vert..
+#     4: user\knausj_talon\code\window_tweak.py:826 | result = _win_set_rect(w, ui.Rect(roun..
+#     3: user\knausj_talon\code\window_tweak.py:1174| w.rect = rect_in
+#     2:                    talon\windows\ui.py:290 |
+#     1:                    talon\windows\ui.py:260 |
+# pywintypes.error: (1400, 'GetWindowPlacement', 'Invalid window handle.')
+# 2021-11-27 09:32:48    IO win_move_continuous_helper: starting w.rect=Rect(1340, 952, 110, 28)
+# 2021-11-27 09:32:48    IO _win_move_pixels_relative: delta_x=0, delta_y=4.76470588235294, x=1340, y=952
+# 2021-11-27 09:32:48    IO _win_set_rect: starting...
+# 2021-11-27 09:32:48 ERROR cron interval error <function _win_move_continuous_helper at 0x00000000ECD19550>
+#    13:                           threading.py:930 * # cron thread
+#    12:                           threading.py:973 *
+#    11:                           threading.py:910 *
+#    10:                          talon\cron.py:155 |
+
+
 # WIP - redo change 845dba7 to include new file
 # WIP - clean up carriage returns and trailing spaces
 # WIP - spurious stops occasionally break continuous operations
