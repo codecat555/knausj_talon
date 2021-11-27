@@ -47,7 +47,7 @@ Continuous move/resize machinery adapted from mouse.py.
 
 # WIP - redo change 845dba7 to include new file
 # WIP - clean up carriage returns and trailing spaces
-# WIP - spurious stops occasionally break continuous operations
+# WIP - occasionally continuous operations just stop in the middle somewhere, related to talon move/resize api..._win_set_rect() returns False.
 # WIP - x_steps should be int, and others
 # WIP - assign types to all variables
 # WIP - review _win_set_rect() return value handling it cross all instances
