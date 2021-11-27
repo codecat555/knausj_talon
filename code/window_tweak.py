@@ -30,7 +30,7 @@ from talon.debug import log_exception
 Direction = Dict[str, bool]
 
 # turn debug messages on and off
-testing: bool = False
+testing: bool = True
 
 # remember the last window for use by the 'win revert' command
 last_window: Dict = dict()
@@ -55,6 +55,8 @@ continuous_final_y = None
 # tag used to enable/disable commands used during window move/resize operations
 continuous_tag_name = 'window_tweak_running'
 continuous_tag_name_qualified = 'user.' + continuous_tag_name
+#
+continuous_resize_alternation = None
 #
 use_bresenham = False
 use_walking_bresenham = True
@@ -442,6 +444,7 @@ def _win_resize_continuous_helper() -> None:
                 # hakuna matata
                 return
  
+            # check limits
             direction_count = sum(continuous_direction.values())
             if direction_count == 1:    # horizontal or vertical
                 if any([resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached]):
@@ -1054,6 +1057,12 @@ def _translate_top_left_by_region_for_resize(w: ui.Window, target_width: float, 
     delta_width = target_width - w.rect.width
     delta_height = target_height - w.rect.height
 
+    if settings.get('user.win_verbose_warnings') != 0:
+        if abs(delta_width) < 2:
+            logging.warning(f'_translate_top_left_by_region_for_resize: width change is less than 2, which is too small for normal resize calculations: {delta_width=}')
+        if abs(delta_height) < 2:
+            logging.warning(f'_translate_top_left_by_region_for_resize: height change is less than 2, which is too small for normal resize calculations: {delta_height=}')
+
     if testing:
         print(f"_translate_top_left_by_region_for_resize: initial rect: {w.rect}\n")
         print(f"_translate_top_left_by_region_for_resize: resize coordinates: {target_width=}, {target_height=}\n")
@@ -1303,8 +1312,13 @@ def _win_resize_pixels_relative(w: ui.Window, delta_width: float, delta_height: 
     # start with the current values
     x = new_x = w.rect.x
     y = new_y = w.rect.y
-    width = new_width = w.rect.width + delta_width
-    height = new_height = w.rect.height + delta_height
+    width = w.rect.width
+    height = w.rect.height
+    new_width = width + delta_width
+    new_height = height + delta_height
+
+    if testing:
+            print(f'_win_resize_pixels_relative: starting {delta_width=}, {delta_height=}')
 
     # invert directions when shrinking non-uniformly. that is, we are shrinking *toward*
     #  the given direction rather than shrinking away from that direction.
@@ -1385,8 +1399,25 @@ def _win_resize_pixels_relative(w: ui.Window, delta_width: float, delta_height: 
             #print(f'_win_resize_pixels_relative: left and down')
 
     elif direction_count == 4:    # stretch from center
-        new_x = new_x - delta_width / 2
-        new_y = new_y - delta_height / 2
+        if abs(delta_width) >= 2:
+            new_x = new_x - delta_width / 2
+            new_y = new_y - delta_height / 2
+        else:
+            # alternate changing size and position, since we can only do one or the other when the delta is less than 2
+            global continuous_resize_alternation
+            if continuous_resize_alternation == 'size':
+                # change position this time
+                new_x = new_x - delta_width
+                new_y = new_y - delta_height
+
+                # remove delta from the size values
+                new_width = width
+                new_height = height
+                
+                continuous_resize_alternation = 'position'
+            else:
+                # change size this time...nothing to actually do other than flip the toggle
+                continuous_resize_alternation = 'size'
 
         new_x, new_width, resize_left_limit_reached = _clip_left_for_resize(w, new_x, new_width, direction)
 
@@ -1400,6 +1431,9 @@ def _win_resize_pixels_relative(w: ui.Window, delta_width: float, delta_height: 
 
     # if testing:
     #     print(f'_win_move_pixels_relative: {delta_x=}, {delta_y=}, {delta_width=}, {delta_height=}')
+
+    if testing:
+        print(f'_win_resize_pixels_relative: {width=}, {new_width=}, {height=}, {new_height=}')
 
     # verbose, but useful sometimes
     if testing:
@@ -1418,18 +1452,21 @@ def _win_resize_pixels_relative(w: ui.Window, delta_width: float, delta_height: 
 
     old_values = (round_x, round_y, round_width, round_height)
     new_values = (new_round_x, new_round_y, new_round_width, new_round_height)
+
+    if testing:
+        print(f'_win_resize_pixels_relative: setting rect {new_values=}')
     
     # make it so
     result = _win_set_rect(w, ui.Rect(*new_values))
 
     if testing:
-        print(f'_win_move_pixels_relative: _win_set_rect returned {result=}')
+        print(f'_win_resize_pixels_relative: _win_set_rect returned {result=}')
         
         diff_x = w.rect.x - round_x
         diff_y = w.rect.y - round_y
-        diff_width = w.rect.width - round_width
-        diff_height = w.rect.height - round_height
-        print(f'_win_move_pixels_relative: change: {diff_x=}, {diff_y=}, {diff_width=}, {diff_height=}')
+        diff_width = round_width - new_round_width
+        diff_height = round_height - new_round_height
+        print(f'_win_resize_pixels_relative: change: {diff_x=}, {diff_y=}, {diff_width=}, {diff_height=}')
 
     if not result:
         # shrink is a special case, need to detect when the window has shrunk to a minimum by
@@ -1473,8 +1510,8 @@ def _win_show(gui: imgui.GUI) -> None:
     gui.text(f"Top Right: {x + width, y}")
     gui.text(f"Bottom Left: {x, y + height}")
     gui.text(f"Bottom Right: {x + width, y + height}")
-    # gui.text(f"Center: {round(w.rect.center.x), round(w.rect.center.y)}")
-    gui.text(f"Center: {w.rect.center.x, w.rect.center.y}")
+    gui.text(f"Center: {round(w.rect.center.x), round(w.rect.center.y)}")
+    # gui.text(f"Center: {w.rect.center.x, w.rect.center.y}")
     gui.spacer()
 
     gui.text(f"Width: {width}")
@@ -1503,8 +1540,8 @@ def _win_show(gui: imgui.GUI) -> None:
     gui.text(f"Top Right: {x + width, y}")
     gui.text(f"Bottom Left: {x, y + height}")
     gui.text(f"Bottom Right: {x + width, y + height}")
-    # gui.text(f"Center: {round(screen.visible_rect.center.x), round(screen.visible_rect.center.y)}")
-    gui.text(f"Center: {screen.visible_rect.center.x, screen.visible_rect.center.y}")
+    gui.text(f"Center: {round(screen.visible_rect.center.x), round(screen.visible_rect.center.y)}")
+    # gui.text(f"Center: {screen.visible_rect.center.x, screen.visible_rect.center.y}")
     gui.spacer()
 
     gui.text(f"Width: {width}")
@@ -1522,8 +1559,8 @@ def _win_show(gui: imgui.GUI) -> None:
     gui.text(f"Top Right: {x + width, y}")
     gui.text(f"Bottom Left: {x, y + height}")
     gui.text(f"Bottom Right: {x + width, y + height}")
-    # gui.text(f"Center: {round(screen.rect.center.x), round(screen.rect.center.y)}")
-    gui.text(f"Center: {screen.rect.center.x, screen.rect.center.y}")
+    gui.text(f"Center: {round(screen.rect.center.x), round(screen.rect.center.y)}")
+    # gui.text(f"Center: {screen.rect.center.x, screen.rect.center.y}")
     gui.spacer()
 
     gui.text(f"Width: {width}")
