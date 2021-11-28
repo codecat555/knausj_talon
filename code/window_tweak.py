@@ -35,21 +35,16 @@ Continuous move/resize machinery adapted from mouse.py.
 #     2:                    talon\windows\ui.py:290 |
 #     1:                    talon\windows\ui.py:260 |
 # pywintypes.error: (1400, 'GetWindowPlacement', 'Invalid window handle.')
-# 2021-11-27 09:32:48    IO win_move_continuous_helper: starting w.rect=Rect(1340, 952, 110, 28)
-# 2021-11-27 09:32:48    IO _win_move_pixels_relative: delta_x=0, delta_y=4.76470588235294, x=1340, y=952
-# 2021-11-27 09:32:48    IO _win_set_rect: starting...
-# 2021-11-27 09:32:48 ERROR cron interval error <function _win_move_continuous_helper at 0x00000000ECD19550>
-#    13:                           threading.py:930 * # cron thread
-#    12:                           threading.py:973 *
-#    11:                           threading.py:910 *
-#    10:                          talon\cron.py:155 |
 
-
-# WIP - occasionally continuous operations just stop in the middle somewhere, related to talon move/resize api..._win_set_rect() returns False.
 # WIP - x_steps should be int, and others
 # WIP - assign types to all variables
 # WIP - review _win_set_rect() return value handling it cross all instances
 # WIP - refactor into classes, move globals into class or instance variables
+
+# WIP - occasionally continuous operations just stop in the middle somewhere, related to talon move/resize api..._win_set_rect() returns False.
+
+# WIP - 'win snap 200 percent' moves win now up a bit, turns out talon resize() API will not increase
+# WIP - height beyond 1625 for some reason...perhaps because the largest of my 3 screens is height 1600?
 
 from typing import Dict, List, Tuple, Optional
 
