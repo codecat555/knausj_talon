@@ -59,6 +59,8 @@ win snap <number> percent [of screen]$:
 win size <number> by <number>$:
     user.win_resize_absolute(number_1, number_2)
 
+# for this command, the direction indicates which part of the window should
+# remain anchored while the other dimensions adust to reach the new size.
 win size <user.compass_direction> <number> by <number>$:
     user.win_resize_absolute(number_1, number_2, compass_direction)
 
