@@ -43,7 +43,7 @@ Continuous move/resize machinery adapted from mouse.py.
 
 # WIP - occasionally continuous operations just stop in the middle somewhere, related to talon move/resize api..._win_set_rect() returns False.
 
-# WIP - 'win snap 200 percent' moves win now up a bit, turns out talon resize() API will not increase
+# WIP - 'win snap 200 percent' moves window up a bit, turns out talon resize() API will not increase
 # WIP - height beyond 1625 for some reason...perhaps because the largest of my 3 screens is height 1600?
 
 from typing import Dict, List, Tuple, Optional
@@ -1267,8 +1267,8 @@ class CompassControl:
                 ui.register('win_move', on_move)
                 event_count += 1
             if (rect_in.width, rect_in.height) != (w.rect.width, w.rect.height):
-                ui.register('win_resize', on_resize)
                 # print(f'_win_set_rect: register win_resize')
+                ui.register('win_resize', on_resize)
                 event_count += 1
             if event_count == 0:
                 # no real work to do
@@ -1301,6 +1301,9 @@ class CompassControl:
                 else:
                     if testing:
                         print('_win_set_rect: no more retries, failed')
+                    
+                    # no more retries
+                    break
             except:
                 log_exception(f'{sys.exc_info()[1]}')
             else:
@@ -1323,6 +1326,9 @@ class CompassControl:
                     result = False
                     if settings.get('user.win_verbose_warnings') != 0:
                         logging.warning(f'_win_set_rect: after update, window size does not exactly match request: {rect_in.width, rect_in.height} -> {w.rect.width, w.rect.height}')
+
+                # no more retries
+                break
 
             finally:
                 # remember old rectangle, for 'win revert'
