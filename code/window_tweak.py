@@ -4,10 +4,11 @@ Tools for managing window size and position.
 Continuous move/resize machinery adapted from mouse.py.
 """
 
-# WIP - double check all nonspecific commands use clipping and others do not
+# WIP - review direction cases and see if they can be simplified/combined
 # WIP - x_steps should be int, and others
 # WIP - assign types to all variables
 # WIP - review self.compass_control._win_set_rect() return value handling it cross all instances
+# WIP - split classes into generic versions that only understand rects and those that handle windows
 
 # WIP - 'win snap 200 percent' moves window up a bit, turns out talon resize() API will not increase
 # WIP - height beyond 1625 for some reason...perhaps because the largest of my 3 screens is height 1600?
@@ -21,7 +22,7 @@ import sys
 import threading
 import time
 
-from talon import ui, Module, Context, actions, speech_system, ctrl, imgui, cron, settings, app, registry
+from talon import ui, Module, Context, actions, ctrl, imgui, cron, settings
 from talon.types.point import Point2d
 from talon.debug import log_exception
 
@@ -955,6 +956,69 @@ class CompassControl:
             self.continuous_old_rect = None
             self.continuous_iteration = 0
 
+    def win_move_absolute(self, w: ui.Window, x: float, y: float, region_in: Optional[Direction] = None) -> None:
+        # find the point which we will move to the given coordinates, as indicated by the region.
+        if region_in:
+            x, y = self.mover._translate_top_left_by_region_for_move(w, x, y, region_in)
+
+            if testing:
+                print(f'win_move_absolute: translated top left position: {x,y}')
+
+        self._win_set_rect(w, ui.Rect(round(x), round(y), round(w.rect.width), round(w.rect.height)))
+
+        if testing:
+            print(f'win_move_absolute: {w.rect=}')
+            ctrl.mouse_move(x, y)
+
+    def win_resize_absolute(self, w: ui.Window, target_width: float, target_height: float, region_in: Optional[Direction] = None) -> None:
+        x = w.rect.x
+        y = w.rect.y
+
+        delta_width = target_width - w.rect.width
+        delta_height = target_height - w.rect.height
+
+        region = None
+        if region_in:
+            # find the point which we will move to the given coordinates, as indicated by the given region.
+
+            region = region_in.copy()
+            # invert directions when shrinking. that is, we are shrinking *toward* the
+            #  given direction rather than shrinking away from that direction.
+            if delta_width < 0:
+                region["left"] = region_in["right"]
+                region["right"] = region_in["left"]
+            #
+            if delta_height < 0:
+                region["up"] = region_in["down"]
+                region["down"] = region_in["up"]
+
+            x, y = self.sizer._translate_top_left_by_region_for_resize(w, target_width, target_height, region)
+
+            if testing:
+                print(f'win_resize_absolute: translated top left position: {x,y}')
+
+        self._win_set_rect(w, ui.Rect(round(x), round(y), round(target_width), round(target_height)))
+
+        if testing:
+            print(f'win_resize_absolute: {w.rect=}')
+            ctrl.mouse_move(w.rect.x, w.rect.y)
+
+    def win_revert(self, w: ui.Window) -> None:
+        if self.last_window and self.last_window['id'] == w.id:
+            if testing:
+                print(f'win_revert: reverting size and/or position for {self.last_window}')
+            self._win_set_rect(w, self.last_window['rect'])
+
+    def win_snap(self, w: ui.Window, direction: Direction) -> None:
+        target_width = (w.screen.visible_rect.width * (percent/100))
+        target_height = (w.screen.visible_rect.height * (percent/100))
+
+        # move window center to screen center
+        self.win_move_absolute(w, w.screen.visible_rect.center.x, w.screen.visible_rect.center.y, direction)
+
+        # set window size
+        self.win_resize_absolute(w, target_width, target_height, direction)
+
     def _get_screen_edge_midpoint(self, screen: ui.Screen, direction: Direction) -> Tuple[float, float]:
         x = y = None
 
@@ -1519,18 +1583,7 @@ class Actions:
         x = x_in
         y = y_in
 
-        # find the point which we will move to the given coordinates, as indicated by the region.
-        if region:
-            x, y = compass_control.mover._translate_top_left_by_region_for_move(w, x, y, region)
-
-            if testing:
-                print(f'win_move_absolute: translated top left position: {x,y}')
-
-        compass_control._win_set_rect(w, ui.Rect(round(x), round(y), round(w.rect.width), round(w.rect.height)))
-
-        if testing:
-            print(f'win_move_absolute: {w.rect=}')
-            ctrl.mouse_move(x_in, y_in)
+        compass_control.win_move_absolute(w, x, y, region)
 
     def win_stretch(direction: Optional[Direction] = None) -> None:
         "Stretch window in small increments until stopped, optionally in the given direction"
@@ -1550,40 +1603,11 @@ class Actions:
 
         compass_control.sizer._win_resize_continuous(w, -1, direction)
 
-    def win_resize_absolute(target_width: float, target_height: float, region_in: Optional[Direction] = None) -> None:
+    def win_resize_absolute(target_width: float, target_height: float, region: Optional[Direction] = None) -> None:
         "Size window to given absolute dimensions, optionally by stretching/shrinking in the direction indicated by the given region"
         w = ui.active_window()
 
-        x = w.rect.x
-        y = w.rect.y
-        delta_width = target_width - w.rect.width
-        delta_height = target_height - w.rect.height
-
-        region = None
-        if region_in:
-            # find the point which we will move to the given coordinates, as indicated by the given region.
-
-            region = region_in.copy()
-            # invert directions when shrinking. that is, we are shrinking *toward* the
-            #  given direction rather than shrinking away from that direction.
-            if delta_width < 0:
-                region["left"] = region_in["right"]
-                region["right"] = region_in["left"]
-            #
-            if delta_height < 0:
-                region["up"] = region_in["down"]
-                region["down"] = region_in["up"]
-
-            x, y = compass_control.sizer._translate_top_left_by_region_for_resize(w, target_width, target_height, region)
-
-            if testing:
-                print(f'win_resize_absolute: translated top left position: {x,y}')
-
-        compass_control._win_set_rect(w, ui.Rect(round(x), round(y), round(target_width), round(target_height)))
-
-        if testing:
-            print(f'win_resize_absolute: {w.rect=}')
-            ctrl.mouse_move(w.rect.x, w.rect.y)
+        compass_control.win_resize_absolute(w, target_width, target_height, region)
 
     def win_move_pixels(distance: int, direction: Direction) -> None:
         "move window some number of pixels"
@@ -1602,8 +1626,6 @@ class Actions:
         delta_width, delta_height = compass_control._get_component_dimensions_by_percent(w, percent, direction, 'move')
 
         return compass_control.mover._win_move_pixels_relative(w, delta_width, delta_height, direction)
-
-# WIP - move action method logic into classes
 
     def win_resize_pixels(distance: int, direction: Direction) -> None:
         "change window size by pixels"
@@ -1635,25 +1657,14 @@ class Actions:
 
         w = ui.active_window()
 
-        target_width = (w.screen.visible_rect.width * (percent/100))
-        target_height = (w.screen.visible_rect.height * (percent/100))
-
-        # move window center to screen center
-        actions.user.win_move_absolute(w.screen.visible_rect.center.x, w.screen.visible_rect.center.y, direction)
-
-        # set window size
-        actions.user.win_resize_absolute(target_width, target_height, direction)
+        compass_control.win_snap(w, direction)
 
     def win_revert() -> None:
         "restore current window's last remembered size and position"
 
         w = ui.active_window()
-
-        if compass_control.last_window and compass_control.last_window['id'] == w.id:
-            if testing:
-                print(f'win_revert: reverting size and/or position for {compass_control.last_window}')
-            compass_control._win_set_rect(w, compass_control.last_window['rect'])
-
+        compass_control.win_revert(w)
+    
     def win_test_bresenham(num: int) -> None:
         "test modified bresenham algo"
 
