@@ -51,7 +51,7 @@ settings():
     # user.context_sensitive_dictation = 1
 
     # The update frequency used when moving a window continuously
-    user.win_move_frequency = "25ms"
+    user.win_move_frequency = "30ms"
 
     # The target speed, in cm/sec, for continuous move operations
     user.win_continuous_move_rate = 4.5
@@ -61,7 +61,7 @@ settings():
 
     # The update frequency used when resizing a window continuously
     # note: setting this value too low may result in 
-    user.win_resize_frequency = "25ms"
+    user.win_resize_frequency = "30ms"
 
     # The target speed, in cm/sec, for continuous resize operations
     user.win_continuous_resize_rate = 4.0
