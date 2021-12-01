@@ -4,7 +4,6 @@ Tools for managing window size and position.
 Continuous move/resize machinery adapted from mouse.py.
 """
 
-# WIP - review int versus float everywhere
 # WIP - review which methods should be 'public' and which should be 'private'
 # WIP - review self.compass_control._win_set_rect() return value handling it cross all instances
 # WIP - review direction cases and see if they can be simplified/combined
@@ -69,8 +68,7 @@ class CompassControl:
                 self.continuous_bres = None
 
         def _win_continuous_helper(self) -> None:
-
-            def _move_it(w: ui.Window, delta_x: float, delta_y: float, direction: Direction) -> Tuple[bool, bool, bool]:
+            def _move_it(w: ui.Window, delta_x: float, delta_y: float, direction: Direction) -> bool:
                 result, horizontal_limit_reached, vertical_limit_reached = self._win_move_pixels_relative(w, delta_x, delta_y, self.compass_control.continuous_direction)
                 if not result or (horizontal_limit_reached and vertical_limit_reached):
                     if testing:
@@ -119,11 +117,12 @@ class CompassControl:
                 if testing:
                     print(f'_win_continuous_helper: starting iteration {self.compass_control.continuous_iteration} - {w.rect=}')
 
-                # if round(self.continuous_move_width_increment) or round(self.continuous_move_height_increment):
                 if self.continuous_move_width_increment or self.continuous_move_height_increment:
                     direction_count = sum(self.compass_control.continuous_direction.values())
                     if direction_count != 4:
-                        _move_it(w, self.continuous_move_width_increment, self.continuous_move_height_increment, self.compass_control.continuous_direction)
+                        if not _move_it(w, self.continuous_move_width_increment, self.continuous_move_height_increment, self.compass_control.continuous_direction):
+                            if testing:
+                                print(f'_win_continuous_helper: move failed')
                     else:    # move to center (special case)
                         initial_x = w.rect.x
                         initial_y = w.rect.y
@@ -136,17 +135,14 @@ class CompassControl:
                                 center_x, center_y = next(self.continuous_bres)
                                 # translate center coordinates to top left
                                 x, y = self._translate_top_left_by_region(w, center_x, center_y, self.compass_control.continuous_direction)
-                                x = round(x)
-                                y = round(y)
                                 if testing:
                                         print(f'_win_continuous_helper: next bresenham point = {center_x, center_y}, corresponding to top left = {x, y}')
                                         print(f'_win_continuous_helper: current window top left = {w.rect.x, w.rect.y}')
+                                # skip until we see some movement
                                 while (x, y) == (round(w.rect.x), round(w.rect.y)):
                                     center_x, center_y = next(self.continuous_bres)
                                     # translate center coordinates to top left
                                     x, y = self._translate_top_left_by_region(w, center_x, center_y, self.compass_control.continuous_direction)
-                                    x = round(x)
-                                    y = round(y)
                                     if testing:
                                         print(f'_win_continuous_helper: skipped to next bresenham point = {center_x, center_y}, corresponding to top left = {x, y}')
                             except StopIteration:
@@ -170,9 +166,8 @@ class CompassControl:
                                 print(f'_win_continuous_helper: stepping from {w.rect.x, w.rect.y} to {x, y}, {delta_x=}, {delta_y=}')
 
                             if not _move_it(w, delta_x, delta_y, self.compass_control.continuous_direction):
-                                elapsed_time_ms = (time.time_ns() - start_time) / 1e6
                                 if testing:
-                                    print(f'_win_continuous_helper: stopped at {w.rect=} ({elapsed_time_ms} ms)')
+                                    print(f'_win_continuous_helper: move failed')
                                 return
 
                             cumulative_delta_x = abs(w.rect.x - initial_x)
@@ -204,8 +199,6 @@ class CompassControl:
                 if settings.get('user.win_verbose_warnings') != 0:
                     logging.warning(f'_win_continuous_helper: iteration {self.compass_control.continuous_iteration} took {elapsed_time_ms}ms, longer than the current win_move_frequency setting. actual rate may not match the win_continuous_move_rate setting.')
             
-            return
-
         def _start_continuous(self) -> None:
             with self.compass_control.continuous_mutex:
                 # WIP - for some reason, below doesn't work
@@ -284,7 +277,7 @@ class CompassControl:
                 new_y = screen_y + screen_height - height
                 vertical_limit_reached = True
 
-            return new_x, new_y, horizontal_limit_reached, vertical_limit_reached
+            return round(new_x), round(new_y), horizontal_limit_reached, vertical_limit_reached
 
         def _win_move_pixels_relative(self, w: ui.Window, delta_x: float, delta_y: float, direction: Direction) -> Tuple[bool, bool, bool]:
             start_time = time.time_ns()
@@ -362,7 +355,7 @@ class CompassControl:
                 new_x, new_y, horizontal_limit_reached, vertical_limit_reached = self._clip_to_screen(w, x, y, w.rect.width, w.rect.height, direction)
 
             # make it so
-            result = self.compass_control._win_set_rect(w, ui.Rect(round(new_x), round(new_y), round(w.rect.width), round(w.rect.height)))
+            result = self.compass_control._win_set_rect(w, ui.Rect(new_x, new_y, w.rect.width, w.rect.height))
 
             elapsed_time_ms = (time.time_ns() - start_time) / 1e6
             if testing:
@@ -422,7 +415,7 @@ class CompassControl:
             if testing:
                 print(f"_translate_top_left_by_region: translated position: {top_left_x=}, {top_left_y=}")
 
-            return top_left_x, top_left_y
+            return round(top_left_x), round(top_left_y)
 
         def _win_test_bresenham_1(self):
             x0 = 0
@@ -486,7 +479,6 @@ class CompassControl:
                 if testing:
                     print(f'_win_continuous_helper: starting iteration {self.compass_control.continuous_iteration} - {w.rect=}')
 
-                # if round(self.continuous_resize_width_increment) or round(self.continuous_resize_height_increment):
                 if self.continuous_resize_width_increment or self.continuous_resize_height_increment:
                     result, resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached = self._win_resize_pixels_relative(w, self.continuous_resize_width_increment, self.continuous_resize_height_increment, self.compass_control.continuous_direction)
 
@@ -644,7 +636,7 @@ class CompassControl:
             if testing:
                 print(f"_translate_top_left_by_region: translated position: {x=}, {y=}, {target_width=}, {target_height=}")
 
-            return x, y
+            return round(x), round(y)
 
         def _clip_left(self, w: ui.Window, x: float, width: float, direction: Direction) -> Tuple[int, int, bool]:
             resize_left_limit_reached = False
@@ -664,7 +656,7 @@ class CompassControl:
                 if testing:
                     print(f'_clip_left: {resize_left_limit_reached=}')
 
-            return x, width, resize_left_limit_reached
+            return round(x), round(width), resize_left_limit_reached
 
         def _clip_up(self, w: ui.Window, y: float, height: float, direction: Direction) -> Tuple[int, int, bool]:
             resize_up_limit_reached = False
@@ -684,7 +676,7 @@ class CompassControl:
                 if testing:
                     print(f'_clip_up: {resize_up_limit_reached=}')
 
-            return y, height, resize_up_limit_reached
+            return round(y), round(height), resize_up_limit_reached
 
         def _clip_right(self, w: ui.Window, x: float, width: float, direction: Direction) -> Tuple[int, int, bool]:
             resize_right_limit_reached = False
@@ -702,7 +694,7 @@ class CompassControl:
 
                 resize_right_limit_reached = True
 
-            return x, width, resize_right_limit_reached
+            return round(x), round(width), resize_right_limit_reached
 
         def _clip_down(self, w: ui.Window, y: float, height: float, direction: Direction) -> Tuple[int, int, bool]:
             resize_down_limit_reached = False
@@ -720,7 +712,7 @@ class CompassControl:
                 if testing:
                     print(f'_clip_right: {resize_down_limit_reached=}')
 
-            return y, height, resize_down_limit_reached
+            return round(y), round(height), resize_down_limit_reached
 
         def _win_resize_pixels_relative(self, w: ui.Window, delta_width: float, delta_height: float, direction_in: Direction) -> Tuple[bool, bool, bool, bool, bool]:
             start_time = time.time_ns()
@@ -816,11 +808,14 @@ class CompassControl:
                     #print(f'_win_resize_pixels_relative: left and down')
 
             elif direction_count == 4:    # stretch from center
-                if abs(delta_width) >= 2 and abs(delta_height) >= 2:
+                if (delta_width == 0 or abs(delta_width) >= 2) and (delta_height == 0 or abs(delta_height) >= 2):
                     # normal case, delta values are divisible by two
                     new_x = new_x - delta_width / 2
                     new_y = new_y - delta_height / 2
                 else:
+                    if testing:
+                        print(f'_win_resize_pixels_relative: delta width and/or height are too small (<2), alternating size and position changes')
+
                     # alternate changing size and position, since we can only do one or the other when the delta is less than 2
                     if self.continuous_resize_alternation == 'size':
                         # change position this time
@@ -836,11 +831,19 @@ class CompassControl:
                         # change size this time...nothing to actually do other than flip the toggle
                         self.continuous_resize_alternation = 'size'
 
+                if testing:
+                    print(f'_win_resize_pixels_relative: before left clip: {new_x=}, {new_width=}')
                 new_x, new_width, resize_left_limit_reached = self._clip_left(w, new_x, new_width, direction)
+                if testing:
+                    print(f'_win_resize_pixels_relative: after left clip: {new_x=}, {new_width=}')
 
                 new_y, new_height, resize_up_limit_reached = self._clip_up(w, new_y, new_height, direction)
 
+                if testing:
+                    print(f'_win_resize_pixels_relative: before right clip: {new_x=}, {new_width=}')
                 new_x, new_width, resize_right_limit_reached = self._clip_right(w, new_x, new_width, direction)
+                if testing:
+                    print(f'_win_resize_pixels_relative: after right clip: {new_x=}, {new_width=}')
 
                 new_y, new_height, resize_down_limit_reached = self._clip_down(w, new_y, new_height, direction)
 
@@ -852,22 +855,25 @@ class CompassControl:
             if testing:
                 print(f'_win_resize_pixels_relative: {width=}, {new_width=}, {height=}, {new_height=}')
 
-            # rounding
-            round_x = round(x)
-            round_y = round(y)
-            round_width = round(width)
-            round_height = round(height)
+            # WIP - can this be deleted?
+            # # rounding
+            # round_x = round(x)
+            # round_y = round(y)
+            # round_width = round(width)
+            # round_height = round(height)
+            # #
+            # new_round_x = round(new_x)
+            # new_round_y = round(new_y)
+            # new_round_width = round(new_width)
+            # new_round_height = round(new_height)
             #
-            new_round_x = round(new_x)
-            new_round_y = round(new_y)
-            new_round_width = round(new_width)
-            new_round_height = round(new_height)
-
-            old_values = (round_x, round_y, round_width, round_height)
-            new_values = (new_round_x, new_round_y, new_round_width, new_round_height)
+            # old_values = (round_x, round_y, round_width, round_height)
+            # new_values = (new_round_x, new_round_y, new_round_width, new_round_height)
+            new_values = (new_x, new_y, new_width, new_height)
 
             if testing:
                 print(f'_win_resize_pixels_relative: setting rect {new_values=}')
+                print(f'_win_resize_pixels_relative: new top right {new_x + new_width, new_y}')
 
             # make it so
             result = self.compass_control._win_set_rect(w, ui.Rect(*new_values))
@@ -876,14 +882,14 @@ class CompassControl:
                 # shrink is a special case, need to detect when the window has shrunk to a minimum by
                 # watching expected values to see when they stop changing as requested.
                 if self.continuous_resize_width_increment < 0:
-                    if w.rect.x != new_round_x or w.rect.width != new_round_width:
+                    if w.rect.x != new_x or w.rect.width != new_width:
                         resize_left_limit_reached = True
                         resize_right_limit_reached = True
                         if testing:
                             print(f'_win_resize_pixels_relative: horizontal shrink limit reached')
 
                 if self.continuous_resize_height_increment < 0:
-                    if w.rect.y != new_round_y or w.rect.height != new_round_height:
+                    if w.rect.y != new_y or w.rect.height != new_height:
                         resize_up_limit_reached = True
                         resize_down_limit_reached = True
                         if testing:
@@ -1097,10 +1103,10 @@ class CompassControl:
 
             _win_stop_gui.hide()
 
-    def _get_diagonal_length(self, rect: ui.Rect) -> Tuple[int, int]:
+    def _get_diagonal_length(self, rect: ui.Rect) -> float:
         return math.sqrt(((rect.width - rect.x) ** 2) + ((rect.height - rect.y) ** 2))
 
-    def _get_center_to_center_rect(self, w: ui.Window) -> ui.Rect:
+    def _get_center_to_center_rect(self, w: ui.Window) -> Tuple[ui.Rect, bool, bool]:
         width = w.rect.width
         height = w.rect.y
 
@@ -1171,7 +1177,7 @@ class CompassControl:
         if testing:
             print(f"_get_component_dimensions: returning {delta_width}, {delta_height}")
 
-        return delta_width, delta_height
+        return round(delta_width), round(delta_height)
 
     def _get_component_dimensions_by_percent(self, w: ui.Window, percent: float, direction: Direction, operation: str) -> Tuple[int, int]:
         if testing:
@@ -1219,7 +1225,7 @@ class CompassControl:
 
             if direction_count == 4 and operation == 'move':    # move to center
                 if testing:
-                    print(f"compass_control.get_continuous_parameters: 'move center' special case")
+                    print(f"get_continuous_parameters: 'move center' special case")
 
                 # special case, return signed values
                 if w.rect.center.x > w.screen.rect.center.x:
@@ -1235,7 +1241,7 @@ class CompassControl:
                 height_increment = dpms_y * frequency
 
         if testing:
-            print(f"compass_control.get_continuous_parameters: returning {width_increment=}, {height_increment=}")
+            print(f"get_continuous_parameters: returning {width_increment=}, {height_increment=}")
 
         return round(width_increment), round(height_increment)
 
