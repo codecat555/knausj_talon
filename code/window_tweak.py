@@ -5,7 +5,7 @@ Continuous move/resize machinery adapted from mouse.py.
 """
 
 # WIP - review int versus float everywhere
-# WIP - assign types to all variables
+# WIP - review which methods should be 'public' and which should be 'private'
 # WIP - review self.compass_control._win_set_rect() return value handling it cross all instances
 # WIP - review direction cases and see if they can be simplified/combined
 # WIP - split classes into generic versions that only understand rects and those that handle windows
@@ -37,24 +37,24 @@ class CompassControl:
         # remember the last window for use by the 'win revert' command
         self.last_window: Dict = dict()
 
-        self.continuous_direction = None
-        self.continuous_old_rect = None
-        self.continuous_mutex = threading.RLock()
-        self.continuous_iteration = 0
+        self.continuous_direction: Direction = None
+        self.continuous_old_rect: ui.Rect = None
+        self.continuous_mutex: threading.RLock = threading.RLock()
+        self.continuous_iteration: int = 0
 
         # tag used to enable/disable commands used during window move/resize operations
-        self.continuous_tag_name = 'window_tweak_running'
-        self.continuous_tag_name_qualified = 'user.' + self.continuous_tag_name
+        self.continuous_tag_name: str = 'window_tweak_running'
+        self.continuous_tag_name_qualified: str = 'user.' + self.continuous_tag_name
 
-        self.mover = CompassControl.Mover(self)
-        self.sizer = CompassControl.Sizer(self)
+        self.mover: CompassControl.Mover = CompassControl.Mover(self)
+        self.sizer: CompassControl.Sizer = CompassControl.Sizer(self)
         
     class Mover:
         def __init__(self, compass_control):
-            self.compass_control = compass_control
+            self.compass_control: CompassControl = compass_control
 
-            self.continuous_move_width_increment = 0
-            self.continuous_move_height_increment = 0
+            self.continuous_move_width_increment: int = 0
+            self.continuous_move_height_increment: int = 0
             self.continuous_move_job = None
             self.continuous_initial_x = None
             self.continuous_initial_y = None
@@ -119,7 +119,8 @@ class CompassControl:
                 if testing:
                     print(f'_win_continuous_helper: starting iteration {self.compass_control.continuous_iteration} - {w.rect=}')
 
-                if round(self.continuous_move_width_increment) or round(self.continuous_move_height_increment):
+                # if round(self.continuous_move_width_increment) or round(self.continuous_move_height_increment):
+                if self.continuous_move_width_increment or self.continuous_move_height_increment:
                     direction_count = sum(self.compass_control.continuous_direction.values())
                     if direction_count != 4:
                         _move_it(w, self.continuous_move_width_increment, self.continuous_move_height_increment, self.compass_control.continuous_direction)
@@ -258,7 +259,7 @@ class CompassControl:
                 if settings.get('user.win_hide_move_gui') == 0:
                     _win_stop_gui.show()
 
-        def _clip_to_screen(self, w, x: float, y: float, width: float, height: float, direction: Direction) -> Tuple[int, int, bool, bool]:
+        def _clip_to_screen(self, w: ui.Window, x: float, y: float, width: float, height: float, direction: Direction) -> Tuple[int, int, bool, bool]:
             screen = w.screen
             screen_x = screen.visible_rect.x
             screen_y = screen.visible_rect.y
@@ -441,12 +442,12 @@ class CompassControl:
 
     class Sizer:
         def __init__(self, compass_control):
-            self.compass_control = compass_control
+            self.compass_control: CompassControl = compass_control
             
-            self.continuous_resize_width_increment = 0
-            self.continuous_resize_height_increment = 0
-            self.continuous_resize_job = None
-            self.continuous_resize_alternation = None
+            self.continuous_resize_width_increment: int = 0
+            self.continuous_resize_height_increment: int = 0
+            self.continuous_resize_job: Cron = None
+            self.continuous_resize_alternation: str = None
 
         def _reset_continuous_flags(self) -> None:
             with self.compass_control.continuous_mutex:
@@ -485,7 +486,8 @@ class CompassControl:
                 if testing:
                     print(f'_win_continuous_helper: starting iteration {self.compass_control.continuous_iteration} - {w.rect=}')
 
-                if round(self.continuous_resize_width_increment) or round(self.continuous_resize_height_increment):
+                # if round(self.continuous_resize_width_increment) or round(self.continuous_resize_height_increment):
+                if self.continuous_resize_width_increment or self.continuous_resize_height_increment:
                     result, resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached = self._win_resize_pixels_relative(w, self.continuous_resize_width_increment, self.continuous_resize_height_increment, self.compass_control.continuous_direction)
 
                     # check limits
@@ -899,7 +901,7 @@ class CompassControl:
 
     # Bresenham line code, from
     #       https://github.com/encukou/bresenham/blob/master/bresenham.py
-    def bresenham(self, x0, y0, x1, y1):
+    def bresenham(self, x0: int, y0: int, x1: int, y1: int) -> Tuple[int, int]:
         """Yield integer coordinates on the line from (x0, y0) to (x1, y1).
 
         Input coordinates should be integers.
