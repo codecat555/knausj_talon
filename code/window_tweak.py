@@ -12,7 +12,7 @@ Continuous move/resize machinery adapted from mouse.py.
 # WIP - 'win snap 200 percent' moves window up a bit, turns out talon resize() API will not increase
 # WIP - height beyond 1625 for some reason...perhaps because the largest of my 3 screens is height 1600?
 
-from typing import Dict, List, Tuple, Optional
+from typing import Any, Dict, List, Tuple, Optional, Iterator
 
 import math
 import queue
@@ -54,11 +54,8 @@ class CompassControl:
 
             self.continuous_move_width_increment: int = 0
             self.continuous_move_height_increment: int = 0
-            self.continuous_move_job = None
-            self.continuous_initial_x = None
-            self.continuous_initial_y = None
-            self.continuous_final_x = None
-            self.continuous_final_y = None
+            self.continuous_move_job: Any = None
+            self.continuous_bres: Iterator[(int, int)] = None
 
         def _reset_continuous_flags(self) -> None:
             with self.compass_control.continuous_mutex:
@@ -439,7 +436,7 @@ class CompassControl:
             
             self.continuous_resize_width_increment: int = 0
             self.continuous_resize_height_increment: int = 0
-            self.continuous_resize_job: Cron = None
+            self.continuous_resize_job: Any = None
             self.continuous_resize_alternation: str = None
 
         def _reset_continuous_flags(self) -> None:
