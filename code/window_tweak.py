@@ -731,7 +731,7 @@ class CompassControl:
                 resize_down_limit_reached = True
 
                 if testing:
-                    print(f'_clip_right: {resize_down_limit_reached=}')
+                    print(f'_clip_down: {resize_down_limit_reached=}')
 
             return round(y), round(height), resize_down_limit_reached
 
@@ -775,18 +775,22 @@ class CompassControl:
                 # apply changes as indicated
                 if direction["left"]:
                     new_x = new_x - delta_width
-                    new_x, new_width, resize_left_limit_reached = self._clip_left(w, new_x, new_width, direction)
+                    # use unswapped direction (direction_in) here, else shrink won't work properly for windows that are partially offscreen
+                    new_x, new_width, resize_left_limit_reached = self._clip_left(w, new_x, new_width, direction_in)
                 #
                 if direction["up"]:
                     new_y = new_y - delta_height
-                    new_y, new_height, resize_up_limit_reached = self._clip_up(w, new_y, new_height, direction)
+                    # use unswapped direction (direction_in) here, else shrink won't work properly for windows that are partially offscreen
+                    new_y, new_height, resize_up_limit_reached = self._clip_up(w, new_y, new_height, direction_in)
                 #
                 if direction["right"]:
-                    new_x, new_width, resize_right_limit_reached = self._clip_right(w, new_x, new_width, direction)
+                    # use unswapped direction (direction_in) here, else shrink won't work properly for windows that are partially offscreen
+                    new_x, new_width, resize_right_limit_reached = self._clip_right(w, new_x, new_width, direction_in)
                 #
                 if direction["down"]:
                     new_height = new_height + delta_height
-                    new_y, new_height, resize_down_limit_reached = self._clip_down(w, new_y, new_height, direction)
+                    # use unswapped direction (direction_in) here, else shrink won't work properly for windows that are partially offscreen
+                    new_y, new_height, resize_down_limit_reached = self._clip_down(w, new_y, new_height, direction_in)
 
             elif direction_count == 2:    # stretch diagonally
                 if direction["left"] and direction["up"]:
@@ -1195,10 +1199,10 @@ class CompassControl:
             if direction["left"] or direction["right"]:
                 distance = rect.width * (percent/100)
             elif direction["up"] or direction["down"]:
-                distance = diagonal_length * (percent/100)
+                distance =  rect.height * (percent/100)
         else:  # diagonal
             diagonal_length = self.get_diagonal_length(rect)
-            distance =  rect.height * (percent/100)
+            distance = diagonal_length * (percent/100)
 
         return self.get_component_dimensions(w, distance, direction, operation)
 
