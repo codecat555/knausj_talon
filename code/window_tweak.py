@@ -4,7 +4,6 @@ Tools for managing window size and position.
 Continuous move/resize machinery adapted from mouse.py.
 """
 
-# WIP - review which methods should be 'public' and which should be 'private'
 # WIP - review direction cases and see if they can be simplified/combined
 # WIP - split classes into generic versions that only understand rects and those that handle windows
 
@@ -81,16 +80,16 @@ class CompassControl:
 
         def _win_continuous_helper(self) -> None:
             def _move_it(w: ui.Window, delta_x: float, delta_y: float, direction: Direction) -> bool:
-                result, horizontal_limit_reached, vertical_limit_reached = self._win_move_pixels_relative(w, delta_x, delta_y, self.compass_control.continuous_direction)
+                result, horizontal_limit_reached, vertical_limit_reached = self.win_move_pixels_relative(w, delta_x, delta_y, self.compass_control.continuous_direction)
                 if not result:
                     if testing:
                         print(f'_win_continuous_helper: window move failed. {result=}, {horizontal_limit_reached=}, {vertical_limit_reached=}')
-                    self.compass_control._win_stop()
+                    self.compass_control.win_stop()
                     return False
                 elif (horizontal_limit_reached and vertical_limit_reached):
                     if testing:
                         print(f'_win_continuous_helper: window move is complete. {result=}, {horizontal_limit_reached=}, {vertical_limit_reached=}')
-                    self.compass_control._win_stop()
+                    self.compass_control.win_stop()
                     return False
                 else:
                     if horizontal_limit_reached:
@@ -151,7 +150,7 @@ class CompassControl:
                             try:
                                 center_x, center_y = next(self.continuous_bres)
                                 # translate center coordinates to top left
-                                x, y = self._translate_top_left_by_region(w, center_x, center_y, self.compass_control.continuous_direction)
+                                x, y = self.translate_top_left_by_region(w, center_x, center_y, self.compass_control.continuous_direction)
                                 if testing:
                                         print(f'_win_continuous_helper: next bresenham point = {center_x, center_y}, corresponding to top left = {x, y}')
                                         print(f'_win_continuous_helper: current window top left = {w.rect.x, w.rect.y}')
@@ -159,14 +158,14 @@ class CompassControl:
                                 while (x, y) == (round(w.rect.x), round(w.rect.y)):
                                     center_x, center_y = next(self.continuous_bres)
                                     # translate center coordinates to top left
-                                    x, y = self._translate_top_left_by_region(w, center_x, center_y, self.compass_control.continuous_direction)
+                                    x, y = self.translate_top_left_by_region(w, center_x, center_y, self.compass_control.continuous_direction)
                                     if testing:
                                         print(f'_win_continuous_helper: skipped to next bresenham point = {center_x, center_y}, corresponding to top left = {x, y}')
                             except StopIteration:
                                 if testing:
                                     print(f'_win_continuous_helper: StopIteration')
 
-                                self.compass_control._win_stop()
+                                self.compass_control.win_stop()
                                 
                                 # return
                                 break
@@ -206,7 +205,7 @@ class CompassControl:
                     # move increments are both zero, nothing to do...so stop
                     if testing:
                         print(f'_win_continuous_helper: width and height increments are both zero, nothing to do, {w.rect=}')
-                    self.compass_control._win_stop()
+                    self.compass_control.win_stop()
 
                 elapsed_time_ms = (time.time_ns() - start_time) / 1e6
                 if testing:
@@ -227,7 +226,7 @@ class CompassControl:
                 if testing:
                     print(f'_start_continuous: {self.continuous_move_job=}')
 
-        def _win_init_continuous(self, w: ui.Window, direction: Direction) -> None:
+        def win_init_continuous(self, w: ui.Window, direction: Direction) -> None:
             with self.compass_control.continuous_mutex:
                 if self.continuous_move_job:
                     if testing:
@@ -254,7 +253,7 @@ class CompassControl:
                     x0 = round(w.rect.center.x)
                     y0 = round(w.rect.center.y)
 
-                    x1, y1 = self.compass_control._get_target_point(w, direction)
+                    x1, y1 = self.compass_control.get_target_point(w, direction)
 
                     x = x_prev = x0
                     y = y_prev = y0
@@ -298,7 +297,7 @@ class CompassControl:
 
             return round(new_x), round(new_y), horizontal_limit_reached, vertical_limit_reached
 
-        def _win_move_pixels_relative(self, w: ui.Window, delta_x: float, delta_y: float, direction: Direction) -> Tuple[bool, bool, bool]:
+        def win_move_pixels_relative(self, w: ui.Window, delta_x: float, delta_y: float, direction: Direction) -> Tuple[bool, bool, bool]:
             start_time = time.time_ns()
 
             result = horizontal_limit_reached = vertical_limit_reached = False
@@ -376,7 +375,7 @@ class CompassControl:
             result = False
             try:
                 # make it so
-                result = self.compass_control._win_set_rect(w, ui.Rect(new_x, new_y, w.rect.width, w.rect.height))
+                result = self.compass_control.win_set_rect(w, ui.Rect(new_x, new_y, w.rect.width, w.rect.height))
             except CompassControl.RectUpdateError as e:
                 self.compass_control._handle_rect_update_error(e)
 
@@ -388,7 +387,7 @@ class CompassControl:
 
         # note: this method is used by win_move_absolute(), which interprets the Direction
         # argument differently than elsewhere in this module.
-        def _translate_top_left_by_region(self, w: ui.Window, target_x: float, target_y: float, region_in: Direction) -> Tuple[int, int]:
+        def translate_top_left_by_region(self, w: ui.Window, target_x: float, target_y: float, region_in: Direction) -> Tuple[int, int]:
 
             width = w.rect.width
             height = w.rect.height
@@ -440,7 +439,25 @@ class CompassControl:
 
             return round(top_left_x), round(top_left_y)
 
-        def _win_test_bresenham_1(self):
+        def win_move_absolute(self, w: ui.Window, x: float, y: float, region_in: Optional[Direction] = None) -> None:
+                # find the point which we will move to the given coordinates, as indicated by the region.
+                if region_in:
+                    x, y = self.translate_top_left_by_region(w, x, y, region_in)
+
+                    if testing:
+                        print(f'win_move_absolute: translated top left position: {x,y}')
+
+                result = False
+                try:
+                    result = self.compass_control.win_set_rect(w, ui.Rect(round(x), round(y), round(w.rect.width), round(w.rect.height)))
+                except CompassControl.RectUpdateError as e:
+                    self.compass_control._handle_rect_update_error(e)
+
+                if testing:
+                    print(f'win_move_absolute: {w.rect=}')
+                    ctrl.mouse_move(x, y)
+
+        def win_test_bresenham_1(self):
             x0 = 0
             y0 = 0
             x1 = 100
@@ -504,12 +521,12 @@ class CompassControl:
                     print(f'_win_continuous_helper: starting iteration {iteration} - {w.rect=}')
 
                 if self.continuous_resize_width_increment or self.continuous_resize_height_increment:
-                    result, resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached = self._win_resize_pixels_relative(w, self.continuous_resize_width_increment, self.continuous_resize_height_increment, self.compass_control.continuous_direction)
+                    result, resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached = self.win_resize_pixels_relative(w, self.continuous_resize_width_increment, self.continuous_resize_height_increment, self.compass_control.continuous_direction)
 
                     if not result:
                         if testing:
                             print(f'_win_continuous_helper: window resize failed. {result=}')
-                        self.compass_control._win_stop()
+                        self.compass_control.win_stop()
                     else:
                         # check limits
                         direction_count = sum(self.compass_control.continuous_direction.values())
@@ -543,7 +560,7 @@ class CompassControl:
                     # resize increments are both zero, nothing to do...so stop
                     if testing:
                         print('_win_continuous_helper: window resize is complete')
-                    self.compass_control._win_stop()
+                    self.compass_control.win_stop()
 
             elapsed_time_ms = (time.time_ns() - start_time) / 1e6
             if testing:
@@ -556,7 +573,7 @@ class CompassControl:
             # for testing
             one_loop_only = False
             if one_loop_only:
-                self.compass_control._win_stop()
+                self.compass_control.win_stop()
 
             self.compass_control.continuous_iteration += 1
 
@@ -566,7 +583,7 @@ class CompassControl:
                 ctx.tags = [self.compass_control.continuous_tag_name_qualified]
                 self.continuous_resize_job = cron.interval(settings.get('user.win_resize_frequency'), self._win_continuous_helper)
 
-        def _win_init_continuous(self, w: ui.Window, multiplier: int, direction: Optional[Direction] = None) -> None:
+        def win_init_continuous(self, w: ui.Window, multiplier: int, direction: Optional[Direction] = None) -> None:
             with self.compass_control.continuous_mutex:
                 if self.continuous_resize_job:
                     logging.warning('cannot start a resize job when one is already running')
@@ -592,7 +609,7 @@ class CompassControl:
                 if settings.get('user.win_hide_resize_gui') == 0:
                     _win_stop_gui.show()
 
-        def _translate_top_left_by_region(self, w: ui.Window, target_width: float, target_height: float, direction: Direction) -> Tuple[int, int]:
+        def translate_top_left_by_region(self, w: ui.Window, target_width: float, target_height: float, direction: Direction) -> Tuple[int, int]:
 
             x = w.rect.x
             y = w.rect.y
@@ -745,7 +762,7 @@ class CompassControl:
 
             return round(y), round(height), resize_down_limit_reached
 
-        def _win_resize_pixels_relative(self, w: ui.Window, delta_width: float, delta_height: float, direction_in: Direction) -> Tuple[bool, bool, bool, bool, bool]:
+        def win_resize_pixels_relative(self, w: ui.Window, delta_width: float, delta_height: float, direction_in: Direction) -> Tuple[bool, bool, bool, bool, bool]:
             start_time = time.time_ns()
 
             result = resize_left_limit_reached = resize_up_limit_reached = resize_right_limit_reached = resize_down_limit_reached = False
@@ -909,7 +926,7 @@ class CompassControl:
             result = False
             try:
                 # make it so
-                result = self.compass_control._win_set_rect(w, ui.Rect(*new_values))
+                result = self.compass_control.win_set_rect(w, ui.Rect(*new_values))
             except CompassControl.RectUpdateError as e:
                 self.compass_control._handle_rect_update_error(e)
 
@@ -936,6 +953,42 @@ class CompassControl:
 
             return result, resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached
 
+        def win_resize_absolute(self, w: ui.Window, target_width: float, target_height: float, region_in: Optional[Direction] = None) -> None:
+            x = w.rect.x
+            y = w.rect.y
+
+            delta_width = target_width - w.rect.width
+            delta_height = target_height - w.rect.height
+
+            region = None
+            if region_in:
+                # find the point which we will move to the given coordinates, as indicated by the given region.
+
+                region = region_in.copy()
+                # invert directions when shrinking. that is, we are shrinking *toward* the
+                #  given direction rather than shrinking away from that direction.
+                if delta_width < 0:
+                    region["left"] = region_in["right"]
+                    region["right"] = region_in["left"]
+                #
+                if delta_height < 0:
+                    region["up"] = region_in["down"]
+                    region["down"] = region_in["up"]
+
+                x, y = self.translate_top_left_by_region(w, target_width, target_height, region)
+
+                if testing:
+                    print(f'win_resize_absolute: translated top left position: {x,y}')
+
+            result = False
+            try:
+                result = self.compass_control.win_set_rect(w, ui.Rect(round(x), round(y), round(target_width), round(target_height)))
+            except CompassControl.RectUpdateError as e:
+                self.compass_control._handle_rect_update_error(e)
+
+            if testing:
+                print(f'win_resize_absolute: {w.rect=}')
+                ctrl.mouse_move(w.rect.x, w.rect.y)
 
 
     # CompassControl methods
@@ -983,61 +1036,6 @@ class CompassControl:
             self.continuous_old_rect = None
             self.continuous_iteration = 0
 
-    def win_move_absolute(self, w: ui.Window, x: float, y: float, region_in: Optional[Direction] = None) -> None:
-        # find the point which we will move to the given coordinates, as indicated by the region.
-        if region_in:
-            x, y = self.mover._translate_top_left_by_region(w, x, y, region_in)
-
-            if testing:
-                print(f'win_move_absolute: translated top left position: {x,y}')
-
-        result = False
-        try:
-            result = self._win_set_rect(w, ui.Rect(round(x), round(y), round(w.rect.width), round(w.rect.height)))
-        except CompassControl.RectUpdateError as e:
-            self._handle_rect_update_error(e)
-
-        if testing:
-            print(f'win_move_absolute: {w.rect=}')
-            ctrl.mouse_move(x, y)
-
-    def win_resize_absolute(self, w: ui.Window, target_width: float, target_height: float, region_in: Optional[Direction] = None) -> None:
-        x = w.rect.x
-        y = w.rect.y
-
-        delta_width = target_width - w.rect.width
-        delta_height = target_height - w.rect.height
-
-        region = None
-        if region_in:
-            # find the point which we will move to the given coordinates, as indicated by the given region.
-
-            region = region_in.copy()
-            # invert directions when shrinking. that is, we are shrinking *toward* the
-            #  given direction rather than shrinking away from that direction.
-            if delta_width < 0:
-                region["left"] = region_in["right"]
-                region["right"] = region_in["left"]
-            #
-            if delta_height < 0:
-                region["up"] = region_in["down"]
-                region["down"] = region_in["up"]
-
-            x, y = self.sizer._translate_top_left_by_region(w, target_width, target_height, region)
-
-            if testing:
-                print(f'win_resize_absolute: translated top left position: {x,y}')
-
-        result = False
-        try:
-            result = self._win_set_rect(w, ui.Rect(round(x), round(y), round(target_width), round(target_height)))
-        except CompassControl.RectUpdateError as e:
-            self._handle_rect_update_error(e)
-
-        if testing:
-            print(f'win_resize_absolute: {w.rect=}')
-            ctrl.mouse_move(w.rect.x, w.rect.y)
-
     def win_revert(self, w: ui.Window) -> None:
         if self.last_window and self.last_window['id'] == w.id:
             if testing:
@@ -1045,7 +1043,7 @@ class CompassControl:
 
             result = False
             try:
-                result = self._win_set_rect(w, self.last_window['rect'])
+                result = self.win_set_rect(w, self.last_window['rect'])
             except CompassControl.RectUpdateError as e:
                 self._handle_rect_update_error(e)            
 
@@ -1059,7 +1057,7 @@ class CompassControl:
         # set window size
         self.win_resize_absolute(w, target_width, target_height, direction)
 
-    def _get_screen_edge_midpoint(self, screen: ui.Screen, direction: Direction) -> Tuple[float, float]:
+    def get_screen_edge_midpoint(self, screen: ui.Screen, direction: Direction) -> Tuple[float, float]:
         x = y = None
 
         direction_count = sum(direction.values())
@@ -1079,7 +1077,7 @@ class CompassControl:
 
         return x, y
 
-    def _get_screen_corner(self, screen: ui.Screen, direction: Direction) -> Tuple[float, float]:
+    def get_screen_corner(self, screen: ui.Screen, direction: Direction) -> Tuple[float, float]:
         x = y = None
 
         direction_count = sum(direction.values())
@@ -1099,24 +1097,24 @@ class CompassControl:
 
         return x, y
 
-    def _get_screen_center(self, screen: ui.Screen) -> Tuple[float, float]:
+    def get_screen_center(self, screen: ui.Screen) -> Tuple[float, float]:
         return screen.visible_rect.center.x, screen.visible_rect.center.y
 
-    def _get_target_point(self, w: ui.Window, direction: Direction) -> Tuple[int, int]:
+    def get_target_point(self, w: ui.Window, direction: Direction) -> Tuple[int, int]:
         screen = w.screen
         target_x = target_y = None
 
         direction_count = sum(direction.values())
         if direction_count == 1:    # horizontal or vertical
-            target_x, target_y = self._get_screen_edge_midpoint(screen, direction)
+            target_x, target_y = self.get_screen_edge_midpoint(screen, direction)
         elif direction_count == 2:    # diagonal
-            target_x, target_y = self._get_screen_corner(screen, direction)
+            target_x, target_y = self.get_screen_corner(screen, direction)
         elif direction_count == 4:    # center
-            target_x, target_y = self._get_screen_center(screen)
+            target_x, target_y = self.get_screen_center(screen)
 
         return round(target_x), round(target_y)
 
-    def _win_stop(self) -> None:
+    def win_stop(self) -> None:
         with self.continuous_mutex:
             if not self.mover.continuous_move_job and not self.sizer.continuous_resize_job:
                 if testing:
@@ -1151,10 +1149,10 @@ class CompassControl:
 
             _win_stop_gui.hide()
 
-    def _get_diagonal_length(self, rect: ui.Rect) -> float:
+    def get_diagonal_length(self, rect: ui.Rect) -> float:
         return math.sqrt(((rect.width - rect.x) ** 2) + ((rect.height - rect.y) ** 2))
 
-    def _get_center_to_center_rect(self, w: ui.Window) -> Tuple[ui.Rect, bool, bool]:
+    def get_center_to_center_rect(self, w: ui.Window) -> Tuple[ui.Rect, bool, bool]:
         width = w.rect.width
         height = w.rect.y
 
@@ -1174,15 +1172,15 @@ class CompassControl:
 
         return center_to_center_rect, horizontal_multiplier, vertical_multiplier
 
-    def _get_component_dimensions(self, w: ui.Window, distance: float, direction: Direction, operation: str) -> Tuple[int, int]:
+    def get_component_dimensions(self, w: ui.Window, distance: float, direction: Direction, operation: str) -> Tuple[int, int]:
         delta_width = delta_height = 0
         rect = w.rect
         direction_count = sum(direction.values())
         if operation == 'move' and direction_count == 4:    # move to center
             # this is a special case - 'move center' - we return signed values for this case
 
-            rect, horizontal_multiplier, vertical_multiplier = self._get_center_to_center_rect(w)
-            diagonal_length = self._get_diagonal_length(rect)
+            rect, horizontal_multiplier, vertical_multiplier = self.get_center_to_center_rect(w)
+            diagonal_length = self.get_diagonal_length(rect)
 
             window_center = w.rect.center
 
@@ -1212,7 +1210,7 @@ class CompassControl:
                 print(f"_get_component_dimensions: y steps={y_steps}")
         else:
             if direction_count > 1:    # diagonal
-                diagonal_length = self._get_diagonal_length(rect)
+                diagonal_length = self.get_diagonal_length(rect)
                 ratio = distance / diagonal_length
                 delta_width = rect.width * ratio
                 delta_height = rect.height * ratio
@@ -1227,17 +1225,17 @@ class CompassControl:
 
         return round(delta_width), round(delta_height)
 
-    def _get_component_dimensions_by_percent(self, w: ui.Window, percent: float, direction: Direction, operation: str) -> Tuple[int, int]:
+    def get_component_dimensions_by_percent(self, w: ui.Window, percent: float, direction: Direction, operation: str) -> Tuple[int, int]:
         if testing:
             print(f'_get_component_dimensions_by_percent: {percent=}')
 
         rect = w.rect
         direction_count = sum(direction.values())
         if operation == 'move' and direction_count == 4:    # move to center
-            rect, *unused = self._get_center_to_center_rect(w)
+            rect, *unused = self.get_center_to_center_rect(w)
 
         if direction_count  > 1:    # diagonal
-            diagonal_length = self._get_diagonal_length(rect)
+            diagonal_length = self.get_diagonal_length(rect)
             distance = diagonal_length * (percent/100)
         else:  # horizontal or vertical
             if direction["left"] or direction["right"]:
@@ -1245,7 +1243,7 @@ class CompassControl:
             elif direction["up"] or direction["down"]:
                 distance =  rect.height * (percent/100)
 
-        return self._get_component_dimensions(w, distance, direction, operation)
+        return self.get_component_dimensions(w, distance, direction, operation)
 
     def _get_continuous_parameters(self, w: ui.Window, rate_cps: float, direction: Direction, operation: str, frequency: str) -> Tuple[int, int]:
         if testing:
@@ -1293,7 +1291,7 @@ class CompassControl:
 
         return round(width_increment), round(height_increment)
 
-    def _win_set_rect(self, w: ui.Window, rect_in: ui.Rect) -> bool:
+    def win_set_rect(self, w: ui.Window, rect_in: ui.Rect) -> bool:
         start_time = time.time_ns()
         
         if not rect_in:
@@ -1607,7 +1605,7 @@ class Actions:
     def win_move(direction: Optional[Direction] = None) -> None:
         "Move window in small increments in the given direction, until stopped"
         w = ui.active_window()
-        compass_control.mover._win_init_continuous(w, direction)
+        compass_control.mover.win_init_continuous(w, direction)
 
     def win_move_absolute(x_in: float, y_in: float, region: Optional[Direction] = None) -> None:
         "Move window to given absolute position, centered on the point indicated by the given region"
@@ -1625,7 +1623,7 @@ class Actions:
             direction = compass_direction(['center'])
 
         w = ui.active_window()
-        compass_control.sizer._win_init_continuous(w, 1, direction)
+        compass_control.sizer.win_init_continuous(w, 1, direction)
 
     def win_shrink(direction: Optional[Direction] = None) -> None:
         "Shrink window in small increments until stopped, optionally in the given direction"
@@ -1634,7 +1632,7 @@ class Actions:
         if not direction:
             direction = compass_direction(['center'])
 
-        compass_control.sizer._win_init_continuous(w, -1, direction)
+        compass_control.sizer.win_init_continuous(w, -1, direction)
 
     def win_resize_absolute(target_width: float, target_height: float, region: Optional[Direction] = None) -> None:
         "Size window to given absolute dimensions, optionally by stretching/shrinking in the direction indicated by the given region"
@@ -1647,41 +1645,41 @@ class Actions:
 
         w = ui.active_window()
 
-        delta_width, delta_height = compass_control._get_component_dimensions(w, distance, direction, 'move')
+        delta_width, delta_height = compass_control.get_component_dimensions(w, distance, direction, 'move')
 
-        return compass_control.mover._win_move_pixels_relative(w, delta_width, delta_height, direction)
+        return compass_control.mover.win_move_pixels_relative(w, delta_width, delta_height, direction)
 
     def win_move_percent(percent: float, direction: Direction) -> None:
         "move window some percentage of the current size"
 
         w = ui.active_window()
 
-        delta_width, delta_height = compass_control._get_component_dimensions_by_percent(w, percent, direction, 'move')
+        delta_width, delta_height = compass_control.get_component_dimensions_by_percent(w, percent, direction, 'move')
 
-        return compass_control.mover._win_move_pixels_relative(w, delta_width, delta_height, direction)
+        return compass_control.mover.win_move_pixels_relative(w, delta_width, delta_height, direction)
 
     def win_resize_pixels(distance: int, direction: Direction) -> None:
         "change window size by pixels"
         w = ui.active_window()
 
-        delta_width, delta_height = compass_control._get_component_dimensions(w, distance, direction, 'resize')
+        delta_width, delta_height = compass_control.get_component_dimensions(w, distance, direction, 'resize')
 
         if testing:
             print(f'win_resize_pixels: {delta_width=}, {delta_height=}')
 
-        compass_control.sizer._win_resize_pixels_relative(w, delta_width, delta_height, direction)
+        compass_control.sizer.win_resize_pixels_relative(w, delta_width, delta_height, direction)
 
     def win_resize_percent(percent: float, direction: Direction) -> None:
         "change window size by a percentage of current size"
 
         w = ui.active_window()
 
-        delta_width, delta_height = compass_control._get_component_dimensions_by_percent(w, percent, direction, 'resize')
+        delta_width, delta_height = compass_control.get_component_dimensions_by_percent(w, percent, direction, 'resize')
 
         if testing:
             print(f'win_resize_percent: {delta_width=}, {delta_height=}')
 
-        compass_control.sizer._win_resize_pixels_relative(w, delta_width, delta_height, direction)
+        compass_control.sizer.win_resize_pixels_relative(w, delta_width, delta_height, direction)
 
     def win_snap_percent(percent: int) -> None:
         "center window and change size to given percentage of parent screen (in each direction)"
@@ -1702,7 +1700,7 @@ class Actions:
         "test modified bresenham algo"
 
         if num == 1:
-            compass_control.mover._win_test_bresenham_1()
+            compass_control.mover.win_test_bresenham_1()
 
 @ctx_stop.action_class("user")
 class WindowTweakActions:
@@ -1711,4 +1709,4 @@ class WindowTweakActions:
     """
     def win_stop() -> None:
         "Stops current window move/resize operation"
-        compass_control._win_stop()
+        compass_control.win_stop()
