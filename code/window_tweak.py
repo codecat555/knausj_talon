@@ -311,7 +311,21 @@ class CompassControl:
 
             # apply changes as indicated
             direction_count = sum(direction.values())
-            if direction_count == 4:    # move to center
+            if direction_count < 4:
+                if direction["left"]:
+                    x -= delta_x
+
+                if direction["right"]:
+                    x += delta_x
+                #
+                if direction["up"]:
+                    y -= delta_y
+
+                if direction["down"]:
+                    y += delta_y
+
+                new_x, new_y, horizontal_limit_reached, vertical_limit_reached = self._clip_to_screen(w, x, y, w.rect.width, w.rect.height, direction)
+            else:    # move to center
                 window_width = w.rect.width
                 window_height = w.rect.height
 
@@ -357,20 +371,6 @@ class CompassControl:
                             print(f'_win_move_pixels_relative: crossed vertical center point')
                         new_y = target_y
                         vertical_limit_reached = True
-            else:
-                if direction["left"]:
-                    x -= delta_x
-
-                if direction["right"]:
-                    x += delta_x
-                #
-                if direction["up"]:
-                    y -= delta_y
-
-                if direction["down"]:
-                    y += delta_y
-
-                new_x, new_y, horizontal_limit_reached, vertical_limit_reached = self._clip_to_screen(w, x, y, w.rect.width, w.rect.height, direction)
 
             result = False
             try:
@@ -1209,16 +1209,16 @@ class CompassControl:
                     y_steps = rect.height/delta_height
                 print(f"_get_component_dimensions: y steps={y_steps}")
         else:
-            if direction_count > 1:    # diagonal
-                diagonal_length = self.get_diagonal_length(rect)
-                ratio = distance / diagonal_length
-                delta_width = rect.width * ratio
-                delta_height = rect.height * ratio
-            else:  # horizontal or vertical
+            if direction_count == 1:    # horizontal or vertical
                 if direction["left"] or direction["right"]:
                     delta_width = distance
                 elif direction["up"] or direction["down"]:
                     delta_height = distance
+            else:  # diagonal
+                diagonal_length = self.get_diagonal_length(rect)
+                ratio = distance / diagonal_length
+                delta_width = rect.width * ratio
+                delta_height = rect.height * ratio
 
         if testing:
             print(f"_get_component_dimensions: returning {delta_width}, {delta_height}")
@@ -1233,15 +1233,15 @@ class CompassControl:
         direction_count = sum(direction.values())
         if operation == 'move' and direction_count == 4:    # move to center
             rect, *unused = self.get_center_to_center_rect(w)
-
-        if direction_count  > 1:    # diagonal
-            diagonal_length = self.get_diagonal_length(rect)
-            distance = diagonal_length * (percent/100)
-        else:  # horizontal or vertical
+#
+        if direction_count  == 1:    # horizontal or vertical
             if direction["left"] or direction["right"]:
                 distance = rect.width * (percent/100)
             elif direction["up"] or direction["down"]:
-                distance =  rect.height * (percent/100)
+                distance = diagonal_length * (percent/100)
+        else:  # diagonal
+            diagonal_length = self.get_diagonal_length(rect)
+            distance =  rect.height * (percent/100)
 
         return self.get_component_dimensions(w, distance, direction, operation)
 
@@ -1265,7 +1265,13 @@ class CompassControl:
         width_increment = height_increment = 0
 
         direction_count = sum(direction.values())
-        if direction_count > 1:    # diagonal
+        if direction_count == 1:
+            # single direction
+            if direction["left"] or direction["right"]:
+                width_increment = dpms_x * frequency
+            elif direction["up"] or direction["down"]:
+                height_increment = dpms_y * frequency
+        else:    # diagonal
             width_increment = dpms_x * frequency
             height_increment = dpms_y * frequency
 
@@ -1279,12 +1285,6 @@ class CompassControl:
                 #
                 if w.rect.center.y > w.screen.rect.center.y:
                     height_increment *= -1
-        else:
-            # single direction
-            if direction["left"] or direction["right"]:
-                width_increment = dpms_x * frequency
-            elif direction["up"] or direction["down"]:
-                height_increment = dpms_y * frequency
 
         if testing:
             print(f"get_continuous_parameters: returning {width_increment=}, {height_increment=}")
