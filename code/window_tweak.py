@@ -4,7 +4,6 @@ Tools for managing window size and position.
 Continuous move/resize machinery adapted from mouse.py.
 """
 
-# WIP - review direction cases and see if they can be simplified/combined
 # WIP - split classes into generic versions that only understand rects and those that handle windows
 
 # WIP - 'win snap 200 percent' moves window up a bit, turns out talon resize() API will not increase
@@ -118,16 +117,6 @@ class CompassControl:
                     # seems sometimes this gets called while the job is being canceled, so just return in that case
                     return
 
-                # this can happen if a stop operation is in process when cron calls this method. in that case,
-                # we can just return.
-                if not self.compass_control.continuous_direction:
-                    if self.continuous_resize_job:
-                        if settings.get('user.win_verbose_warnings') != 0:
-                            # I don't ever expect to see this, that's why it's here
-                            logging.warning('_win_continuous_helper: found null self.compass_control.continuous_direction while a move job is running...')
-                    # hakuna matata
-                    return
-
                 w = ui.active_window()
 
                 if testing:
@@ -217,8 +206,6 @@ class CompassControl:
             
         def _start_continuous(self) -> None:
             with self.compass_control.continuous_mutex:
-                # WIP - for some reason, below doesn't work
-                # ctx.tags.add(self.compass_control.continuous_tag_name_qualified)
                 ctx.tags = [self.compass_control.continuous_tag_name_qualified]
                 self.continuous_move_job = cron.interval(settings.get('user.win_move_frequency'), self._win_continuous_helper)
                 if testing:
@@ -256,8 +243,8 @@ class CompassControl:
                     x = x_prev = x0
                     y = y_prev = y0
 
-                    # note that this is based on the line from window center to screen center, resulting coordinates
-                    # we'll have to be translated to top left to set window position, etc.
+                    # note that this is based on the line from window center to screen center, resulting
+                    # coordinates will have to be translated to top left to set window position, etc.
                     self.continuous_bres = self.compass_control.bresenham(x0, y0, x1, y1)
 
                     # discard initial point (we're already there)
@@ -502,17 +489,6 @@ class CompassControl:
                     # seems sometimes this gets called while the job is being canceled, so just return that case
                     return
 
-                # WIP - can we remove this?
-                # # this can happen if a stop operation is in process when cron calls this method. in that case,
-                # # we can just return.
-                # if not self.compass_control.continuous_direction:
-                #     if self.continuous_resize_job:
-                #         if settings.get('user.win_verbose_warnings') != 0:
-                #             # I don't ever expect to see this, that's why it's here
-                #             logging.warning('_win_continuous_helper: found null self.compass_control.continuous_direction while a resize job is running...')
-                #     # hakuna matata
-                #     return
-
                 w = ui.active_window()
 
                 if testing:
@@ -577,7 +553,6 @@ class CompassControl:
 
         def _start_continuous(self) -> None:
             with self.compass_control.continuous_mutex:
-                # ctx.tags.add(self.compass_control.continuous_tag_name_qualified)
                 ctx.tags = [self.compass_control.continuous_tag_name_qualified]
                 self.continuous_resize_job = cron.interval(settings.get('user.win_resize_frequency'), self._win_continuous_helper)
 
@@ -901,25 +876,10 @@ class CompassControl:
             if testing:
                 print(f'_win_resize_pixels_relative: {width=}, {new_width=}, {height=}, {new_height=}')
 
-            # WIP - can this be deleted?
-            # # rounding
-            # round_x = round(x)
-            # round_y = round(y)
-            # round_width = round(width)
-            # round_height = round(height)
-            # #
-            # new_round_x = round(new_x)
-            # new_round_y = round(new_y)
-            # new_round_width = round(new_width)
-            # new_round_height = round(new_height)
-            #
-            # old_values = (round_x, round_y, round_width, round_height)
-            # new_values = (new_round_x, new_round_y, new_round_width, new_round_height)
             new_values = (new_x, new_y, new_width, new_height)
 
             if testing:
                 print(f'_win_resize_pixels_relative: setting rect {new_values=}')
-                print(f'_win_resize_pixels_relative: new top right {new_x + new_width, new_y}')
 
             result = False
             try:
@@ -1128,8 +1088,7 @@ class CompassControl:
             if self.sizer.continuous_resize_job:
                 cron.cancel(self.sizer.continuous_resize_job)
 
-            # WIP - below call does not work for some reason
-            # ctx.tags.remove(self.continuous_tag_name_qualified)
+            # disable 'win stop' command
             ctx.tags = []
 
             if self.continuous_old_rect:
@@ -1231,7 +1190,7 @@ class CompassControl:
         direction_count = sum(direction.values())
         if operation == 'move' and direction_count == 4:    # move to center
             rect, *unused = self.get_center_to_center_rect(w)
-#
+
         if direction_count  == 1:    # horizontal or vertical
             if direction["left"] or direction["right"]:
                 distance = rect.width * (percent/100)
@@ -1361,8 +1320,6 @@ class CompassControl:
                     
                     # no more retries
                     break
-            # except:
-            #     log_exception(f'{sys.exc_info()[1]}')
             else:
                 if testing:
                     print(f'_win_set_rect: before: {old_rect}')
