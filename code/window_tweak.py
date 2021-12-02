@@ -142,11 +142,9 @@ class CompassControl:
                     else:    # move to center (special case)
                         initial_x = w.rect.x
                         initial_y = w.rect.y
-                        win_move_target_width = self.continuous_move_width_increment
-                        win_move_target_height = self.continuous_move_height_increment
                         cumulative_delta_x = cumulative_delta_y = 0
                         center_x = center_y = 0
-                        while win_move_target_width != 0 and win_move_target_height != 0:
+                        while True:
                             try:
                                 center_x, center_y = next(self.continuous_bres)
                                 # translate center coordinates to top left
@@ -188,19 +186,19 @@ class CompassControl:
 
                             cumulative_delta_x = abs(w.rect.x - initial_x)
                             if testing:
-                                print(f'_win_continuous_helper: {cumulative_delta_x=}, {win_move_target_width=}')
-                            if win_move_target_width != 0 and cumulative_delta_x >= abs(win_move_target_width):
+                                print(f'_win_continuous_helper: {cumulative_delta_x=}, {self.continuous_move_width_increment=}')
+                            if self.continuous_move_width_increment != 0 and cumulative_delta_x >= abs(self.continuous_move_width_increment):
                                 if testing:
                                     print(f'_win_continuous_helper: reached horizontal limit for current iteration, stopping')
-                                win_move_target_width = 0
+                                break
 
                             cumulative_delta_y = abs(w.rect.y - initial_y)
                             if testing:
-                                print(f'_win_continuous_helper: {cumulative_delta_y=}, {win_move_target_height=}')
-                            if win_move_target_height != 0 and cumulative_delta_y >= abs(win_move_target_height):
+                                print(f'_win_continuous_helper: {cumulative_delta_y=}, {self.continuous_move_height_increment=}')
+                            if self.continuous_move_height_increment != 0 and cumulative_delta_y >= abs(self.continuous_move_height_increment):
                                 if testing:
                                     print(f'_win_continuous_helper: reached vertical limit for current iteration, stopping')
-                                win_move_target_height = 0
+                                break
                 else:
                     # move increments are both zero, nothing to do...so stop
                     if testing:
@@ -1614,7 +1612,7 @@ class Actions:
         x = x_in
         y = y_in
 
-        compass_control.win_move_absolute(w, x, y, region)
+        compass_control.mover.win_move_absolute(w, x, y, region)
 
     def win_stretch(direction: Optional[Direction] = None) -> None:
         "Stretch window in small increments until stopped, optionally in the given direction"
@@ -1638,7 +1636,7 @@ class Actions:
         "Size window to given absolute dimensions, optionally by stretching/shrinking in the direction indicated by the given region"
         w = ui.active_window()
 
-        compass_control.win_resize_absolute(w, target_width, target_height, region)
+        compass_control.sizer.win_resize_absolute(w, target_width, target_height, region)
 
     def win_move_pixels(distance: int, direction: Direction) -> None:
         "move window some number of pixels"
