@@ -5,7 +5,6 @@ Continuous move/resize machinery adapted from mouse.py.
 """
 
 # WIP - review which methods should be 'public' and which should be 'private'
-# WIP - review self.compass_control._win_set_rect() return value handling it cross all instances
 # WIP - review direction cases and see if they can be simplified/combined
 # WIP - split classes into generic versions that only understand rects and those that handle windows
 
@@ -32,6 +31,22 @@ Direction = Dict[str, bool]
 testing: bool = True
 
 class CompassControl:
+    class RectUpdateError(Exception):
+        def __init__(self, requested, actual):
+            self.requested = requested
+            self.actual = actual
+        
+    def _handle_rect_update_error(self, e: RectUpdateError) -> None:
+        if settings.get('user.win_verbose_warnings') != 0:
+            position_matches_request = (e.requested.x, e.requested.y) == (e.actual.x, e.actual.y)
+            size_matches_request = (e.requested.width, e.requested.height) == (e.actual.width, e.actual.height)
+
+            if not position_matches_request:
+                logging.warning(f'after window update, size does not exactly match request: {e.requested.width, e.requested.height} -> {e.actual.width, e.actual.height}')
+        
+            if not size_matches_request:
+                logging.warning(f'after window update, window position does not exactly match request: {e.requested.x, e.requested.y} -> {e.actual.x, e.actual.y}')
+
     def __init__(self):
         # remember the last window for use by the 'win revert' command
         self.last_window: Dict = dict()
@@ -67,7 +82,12 @@ class CompassControl:
         def _win_continuous_helper(self) -> None:
             def _move_it(w: ui.Window, delta_x: float, delta_y: float, direction: Direction) -> bool:
                 result, horizontal_limit_reached, vertical_limit_reached = self._win_move_pixels_relative(w, delta_x, delta_y, self.compass_control.continuous_direction)
-                if not result or (horizontal_limit_reached and vertical_limit_reached):
+                if not result:
+                    if testing:
+                        print(f'_win_continuous_helper: window move failed. {result=}, {horizontal_limit_reached=}, {vertical_limit_reached=}')
+                    self.compass_control._win_stop()
+                    return False
+                elif (horizontal_limit_reached and vertical_limit_reached):
                     if testing:
                         print(f'_win_continuous_helper: window move is complete. {result=}, {horizontal_limit_reached=}, {vertical_limit_reached=}')
                     self.compass_control._win_stop()
@@ -84,13 +104,13 @@ class CompassControl:
             start_mutex_wait = time.time_ns()
 
             with self.compass_control.continuous_mutex:
+                iteration = self.compass_control.continuous_iteration
+
                 elapsed_time_ms = (time.time_ns() - start_mutex_wait) / 1e6
                 if testing:
-                    print(f'_win_continuous_helper: mutex wait ({elapsed_time_ms} ms)')
+                    print(f'_win_continuous_helper: iteration {iteration} mutex wait ({elapsed_time_ms} ms)')
 
                 start_time = time.time_ns()
-
-                self.compass_control.continuous_iteration += 1
 
                 # if testing:
                 #     print(f'_win_continuous_helper: current thread = {threading.get_native_id()}')
@@ -112,7 +132,7 @@ class CompassControl:
                 w = ui.active_window()
 
                 if testing:
-                    print(f'_win_continuous_helper: starting iteration {self.compass_control.continuous_iteration} - {w.rect=}')
+                    print(f'_win_continuous_helper: starting iteration {iteration} - {w.rect=}')
 
                 if self.continuous_move_width_increment or self.continuous_move_height_increment:
                     direction_count = sum(self.compass_control.continuous_direction.values())
@@ -143,13 +163,13 @@ class CompassControl:
                                     if testing:
                                         print(f'_win_continuous_helper: skipped to next bresenham point = {center_x, center_y}, corresponding to top left = {x, y}')
                             except StopIteration:
-                                elapsed_time_ms = (time.time_ns() - start_time) / 1e6
                                 if testing:
-                                    print(f'_win_continuous_helper: StopIteration ({elapsed_time_ms} ms)')
+                                    print(f'_win_continuous_helper: StopIteration')
 
                                 self.compass_control._win_stop()
                                 
-                                return
+                                # return
+                                break
 
                             delta_x = abs(x - w.rect.x)
                             if self.continuous_move_width_increment < 0:
@@ -188,13 +208,15 @@ class CompassControl:
                         print(f'_win_continuous_helper: width and height increments are both zero, nothing to do, {w.rect=}')
                     self.compass_control._win_stop()
 
-            elapsed_time_ms = (time.time_ns() - start_time) / 1e6
-            if testing:
-                print(f'_win_continuous_helper: iteration done ({elapsed_time_ms} ms)')
-            frequency = float((settings.get('user.win_move_frequency'))[:-2])
-            if elapsed_time_ms > frequency:
-                if settings.get('user.win_verbose_warnings') != 0:
-                    logging.warning(f'_win_continuous_helper: iteration {self.compass_control.continuous_iteration} took {elapsed_time_ms}ms, longer than the current win_move_frequency setting. actual rate may not match the win_continuous_move_rate setting.')
+                elapsed_time_ms = (time.time_ns() - start_time) / 1e6
+                if testing:
+                    print(f'_win_continuous_helper: iteration {iteration} done ({elapsed_time_ms} ms)')
+                frequency = float((settings.get('user.win_move_frequency'))[:-2])
+                if elapsed_time_ms > frequency:
+                    if settings.get('user.win_verbose_warnings') != 0:
+                        logging.warning(f'_win_continuous_helper: move iteration {iteration} took {elapsed_time_ms}ms, longer than the current win_move_frequency setting. actual rate may not match the win_continuous_move_rate setting.')
+
+                self.compass_control.continuous_iteration += 1
             
         def _start_continuous(self) -> None:
             with self.compass_control.continuous_mutex:
@@ -351,8 +373,12 @@ class CompassControl:
 
                 new_x, new_y, horizontal_limit_reached, vertical_limit_reached = self._clip_to_screen(w, x, y, w.rect.width, w.rect.height, direction)
 
-            # make it so
-            result = self.compass_control._win_set_rect(w, ui.Rect(new_x, new_y, w.rect.width, w.rect.height))
+            result = False
+            try:
+                # make it so
+                result = self.compass_control._win_set_rect(w, ui.Rect(new_x, new_y, w.rect.width, w.rect.height))
+            except CompassControl.RectUpdateError as e:
+                self.compass_control._handle_rect_update_error(e)
 
             elapsed_time_ms = (time.time_ns() - start_time) / 1e6
             if testing:
@@ -449,82 +475,90 @@ class CompassControl:
             start_mutex_wait = time.time_ns()
 
             with self.compass_control.continuous_mutex:
+                iteration = self.compass_control.continuous_iteration
+
                 elapsed_time_ms = (time.time_ns() - start_mutex_wait) / 1e6
                 if testing:
                     print(f'win_continuous_helper: mutex wait ({elapsed_time_ms} ms)')
 
                 start_time = time.time_ns()
 
-                self.compass_control.continuous_iteration += 1
-                
                 if not self.continuous_resize_job:
                     # seems sometimes this gets called while the job is being canceled, so just return that case
                     return
 
-                # this can happen if a stop operation is in process when cron calls this method. in that case,
-                # we can just return.
-                if not self.compass_control.continuous_direction:
-                    if self.continuous_resize_job:
-                        if settings.get('user.win_verbose_warnings') != 0:
-                            # I don't ever expect to see this, that's why it's here
-                            logging.warning('_win_continuous_helper: found null self.compass_control.continuous_direction while a resize job is running...')
-                    # hakuna matata
-                    return
+                # WIP - can we remove this?
+                # # this can happen if a stop operation is in process when cron calls this method. in that case,
+                # # we can just return.
+                # if not self.compass_control.continuous_direction:
+                #     if self.continuous_resize_job:
+                #         if settings.get('user.win_verbose_warnings') != 0:
+                #             # I don't ever expect to see this, that's why it's here
+                #             logging.warning('_win_continuous_helper: found null self.compass_control.continuous_direction while a resize job is running...')
+                #     # hakuna matata
+                #     return
 
                 w = ui.active_window()
 
                 if testing:
-                    print(f'_win_continuous_helper: starting iteration {self.compass_control.continuous_iteration} - {w.rect=}')
+                    print(f'_win_continuous_helper: starting iteration {iteration} - {w.rect=}')
 
                 if self.continuous_resize_width_increment or self.continuous_resize_height_increment:
                     result, resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached = self._win_resize_pixels_relative(w, self.continuous_resize_width_increment, self.continuous_resize_height_increment, self.compass_control.continuous_direction)
 
-                    # check limits
-                    direction_count = sum(self.compass_control.continuous_direction.values())
-                    if direction_count == 1:    # horizontal or vertical
-                        if any([resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached]):
-                            if testing:
-                                print(f'_win_continuous_helper: single direction limit reached')
-                            self.continuous_resize_width_increment = 0
-                            self.continuous_resize_height_increment = 0
-                    elif direction_count == 2:    # diagonal
-                        if resize_left_limit_reached or resize_right_limit_reached:
-                            if testing:
-                                print(f'_win_continuous_helper: horizontal limit reached')
-                            self.continuous_resize_width_increment = 0
-                        #
-                        if resize_up_limit_reached or resize_down_limit_reached:
-                            if testing:
-                                print(f'_win_continuous_helper: vertical limit reached')
-                            self.continuous_resize_height_increment = 0
-                    elif direction_count == 4:    # from center
-                        if resize_left_limit_reached and resize_right_limit_reached:
-                            if testing:
-                                print(f'_win_continuous_helper: horizontal limit reached')
-                            self.continuous_resize_width_increment = 0
+                    if not result:
+                        if testing:
+                            print(f'_win_continuous_helper: window resize failed. {result=}')
+                        self.compass_control._win_stop()
+                    else:
+                        # check limits
+                        direction_count = sum(self.compass_control.continuous_direction.values())
+                        if direction_count == 1:    # horizontal or vertical
+                            if any([resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached]):
+                                if testing:
+                                    print(f'_win_continuous_helper: single direction limit reached')
+                                self.continuous_resize_width_increment = 0
+                                self.continuous_resize_height_increment = 0
+                        elif direction_count == 2:    # diagonal
+                            if resize_left_limit_reached or resize_right_limit_reached:
+                                if testing:
+                                    print(f'_win_continuous_helper: horizontal limit reached')
+                                self.continuous_resize_width_increment = 0
+                            #
+                            if resize_up_limit_reached or resize_down_limit_reached:
+                                if testing:
+                                    print(f'_win_continuous_helper: vertical limit reached')
+                                self.continuous_resize_height_increment = 0
+                        elif direction_count == 4:    # from center
+                            if resize_left_limit_reached and resize_right_limit_reached:
+                                if testing:
+                                    print(f'_win_continuous_helper: horizontal limit reached')
+                                self.continuous_resize_width_increment = 0
 
-                        if resize_up_limit_reached and resize_down_limit_reached:
-                            if testing:
-                                print(f'_win_continuous_helper: vertical limit reached')
-                            self.continuous_resize_height_increment = 0
+                            if resize_up_limit_reached and resize_down_limit_reached:
+                                if testing:
+                                    print(f'_win_continuous_helper: vertical limit reached')
+                                self.continuous_resize_height_increment = 0
                 else:
                     # resize increments are both zero, nothing to do...so stop
                     if testing:
                         print('_win_continuous_helper: window resize is complete')
                     self.compass_control._win_stop()
 
-                # for testing
-                one_loop_only = False
-                if one_loop_only:
-                    self.compass_control._win_stop()
-
             elapsed_time_ms = (time.time_ns() - start_time) / 1e6
             if testing:
-                print(f'_win_continuous_helper: iteration done ({elapsed_time_ms} ms)')
+                print(f'_win_continuous_helper: iteration {iteration} done ({elapsed_time_ms} ms)')
             frequency = float((settings.get('user.win_resize_frequency'))[:-2])
             if elapsed_time_ms > frequency:
                 if settings.get('user.win_verbose_warnings') != 0:
-                    logging.warning(f'_win_continuous_helper: iteration {self.compass_control.continuous_iteration} took {elapsed_time_ms}ms, longer than the current win_resize_frequency setting. actual rate may not match the win_continuous_resize_rate setting.')
+                    logging.warning(f'_win_continuous_helper: resize iteration {iteration} took {elapsed_time_ms}ms, longer than the current win_resize_frequency setting. actual rate may not match the win_continuous_resize_rate setting.')
+
+            # for testing
+            one_loop_only = False
+            if one_loop_only:
+                self.compass_control._win_stop()
+
+            self.compass_control.continuous_iteration += 1
 
         def _start_continuous(self) -> None:
             with self.compass_control.continuous_mutex:
@@ -872,8 +906,12 @@ class CompassControl:
                 print(f'_win_resize_pixels_relative: setting rect {new_values=}')
                 print(f'_win_resize_pixels_relative: new top right {new_x + new_width, new_y}')
 
-            # make it so
-            result = self.compass_control._win_set_rect(w, ui.Rect(*new_values))
+            result = False
+            try:
+                # make it so
+                result = self.compass_control._win_set_rect(w, ui.Rect(*new_values))
+            except CompassControl.RectUpdateError as e:
+                self.compass_control._handle_rect_update_error(e)
 
             if not result:
                 # shrink is a special case, need to detect when the window has shrunk to a minimum by
@@ -953,7 +991,11 @@ class CompassControl:
             if testing:
                 print(f'win_move_absolute: translated top left position: {x,y}')
 
-        self._win_set_rect(w, ui.Rect(round(x), round(y), round(w.rect.width), round(w.rect.height)))
+        result = False
+        try:
+            result = self._win_set_rect(w, ui.Rect(round(x), round(y), round(w.rect.width), round(w.rect.height)))
+        except CompassControl.RectUpdateError as e:
+            self._handle_rect_update_error(e)
 
         if testing:
             print(f'win_move_absolute: {w.rect=}')
@@ -986,7 +1028,11 @@ class CompassControl:
             if testing:
                 print(f'win_resize_absolute: translated top left position: {x,y}')
 
-        self._win_set_rect(w, ui.Rect(round(x), round(y), round(target_width), round(target_height)))
+        result = False
+        try:
+            result = self._win_set_rect(w, ui.Rect(round(x), round(y), round(target_width), round(target_height)))
+        except CompassControl.RectUpdateError as e:
+            self._handle_rect_update_error(e)
 
         if testing:
             print(f'win_resize_absolute: {w.rect=}')
@@ -996,7 +1042,12 @@ class CompassControl:
         if self.last_window and self.last_window['id'] == w.id:
             if testing:
                 print(f'win_revert: reverting size and/or position for {self.last_window}')
-            self._win_set_rect(w, self.last_window['rect'])
+
+            result = False
+            try:
+                result = self._win_set_rect(w, self.last_window['rect'])
+            except CompassControl.RectUpdateError as e:
+                self._handle_rect_update_error(e)            
 
     def win_snap(self, w: ui.Window, percent: int, direction: Direction) -> None:
         target_width = (w.screen.visible_rect.width * (percent/100))
@@ -1251,14 +1302,14 @@ class CompassControl:
         retries = settings.get('user.win_set_retries')
         queue_timeout = settings.get('user.win_set_queue_timeout')
 
-        # adapted from https://talonvoice.slack.com/archives/C9MHQ4AGP/p1635971780355900
+        # rect update code adapted from https://talonvoice.slack.com/archives/C9MHQ4AGP/p1635971780355900
         q = queue.Queue()
         def on_move(event_win: ui.Window) -> None:
             if event_win == w and w.rect != old_rect:
                 q.put(1)
                 if testing:
                     print(f'_win_set_rect: win position changed')
-
+        #
         def on_resize(event_win: ui.Window) -> None:
             if event_win == w and w.rect != old_rect:
                 q.put(1)
@@ -1314,8 +1365,8 @@ class CompassControl:
                     
                     # no more retries
                     break
-            except:
-                log_exception(f'{sys.exc_info()[1]}')
+            # except:
+            #     log_exception(f'{sys.exc_info()[1]}')
             else:
                 if testing:
                     print(f'_win_set_rect: before: {old_rect}')
@@ -1324,20 +1375,13 @@ class CompassControl:
 
                 result = True
 
-                # results are not guaranteed, warn if the request could not be fulfilled exactly
-                if (rect_in.x, rect_in.y) != (w.rect.x, w.rect.y):
-                    result = False
-                    if settings.get('user.win_verbose_warnings') != 0:
-                        logging.warning(f'_win_set_rect: after update, window position does not exactly match request: {rect_in.x, rect_in.y} -> {w.rect.x, w.rect.y}')
 
-                if (rect_in.width, rect_in.height) != (w.rect.width, w.rect.height):
-                    # warning below disabled because it happens normally in the course of shrinking
-                    # a window (when it has reached minimal size).
-                    result = False
-                    if settings.get('user.win_verbose_warnings') != 0:
-                        logging.warning(f'_win_set_rect: after update, window size does not exactly match request: {rect_in.width, rect_in.height} -> {w.rect.width, w.rect.height}')
+                position_matches_request = (rect_in.x, rect_in.y) == (w.rect.x, w.rect.y)
+                size_matches_request = (rect_in.width, rect_in.height) == (w.rect.width, w.rect.height)
+                if not position_matches_request or not size_matches_request:
+                    raise CompassControl.RectUpdateError(requested=rect_in, actual=w.rect)
 
-                # no more retries
+                # done with retry loop
                 break
 
             finally:
@@ -1378,13 +1422,13 @@ tag: user.{compass_control.continuous_tag_name}
 mod.setting(
     "win_move_frequency",
     type=str,
-    default="30ms",
+    default="40ms",
     desc="The update frequency used when moving a window continuously",
 )
 mod.setting(
     "win_resize_frequency",
     type=str,
-    default="30ms",
+    default="40ms",
     desc="The update frequency used when resizing a window continuously",
 )
 mod.setting(
@@ -1478,8 +1522,8 @@ def _win_show_gui(gui: imgui.GUI) -> None:
     gui.text(f"Center: {round(w.rect.center.x), round(w.rect.center.y)}")
     gui.spacer()
 
-    gui.text(f"Width: {width}")
-    gui.text(f"Height: {height}")
+    gui.text(f"Width: {round(width)}")
+    gui.text(f"Height: {round(height)}")
 
     gui.line()
 
@@ -1500,15 +1544,15 @@ def _win_show_gui(gui: imgui.GUI) -> None:
     height = screen.visible_rect.height
 
     gui.text(f"__Visible Rectangle__")
-    gui.text(f"Top Left: {x, y}")
-    gui.text(f"Top Right: {x + width, y}")
-    gui.text(f"Bottom Left: {x, y + height}")
-    gui.text(f"Bottom Right: {x + width, y + height}")
+    gui.text(f"Top Left: {round(x), round(y)}")
+    gui.text(f"Top Right: {round(x + width), round(y)}")
+    gui.text(f"Bottom Left: {round(x), round(y + height)}")
+    gui.text(f"Bottom Right: {round(x + width), round(y + height)}")
     gui.text(f"Center: {round(screen.visible_rect.center.x), round(screen.visible_rect.center.y)}")
     gui.spacer()
 
-    gui.text(f"Width: {width}")
-    gui.text(f"Height: {height}")
+    gui.text(f"Width: {round(width)}")
+    gui.text(f"Height: {round(height)}")
 
     gui.spacer()
 
@@ -1518,15 +1562,15 @@ def _win_show_gui(gui: imgui.GUI) -> None:
     height = screen.rect.height
 
     gui.text(f"__Physical Rectangle__")
-    gui.text(f"Top Left: {x, y}")
-    gui.text(f"Top Right: {x + width, y}")
-    gui.text(f"Bottom Left: {x, y + height}")
-    gui.text(f"Bottom Right: {x + width, y + height}")
+    gui.text(f"Top Left: {round(x), round(y)}")
+    gui.text(f"Top Right: {round(x + width), round(y)}")
+    gui.text(f"Bottom Left: {round(x), round(y + height)}")
+    gui.text(f"Bottom Right: {round(x + width), round(y + height)}")
     gui.text(f"Center: {round(screen.rect.center.x), round(screen.rect.center.y)}")
     gui.spacer()
 
-    gui.text(f"Width: {width}")
-    gui.text(f"Height: {height}")
+    gui.text(f"Width: {round(width)}")
+    gui.text(f"Height: {round(height)}")
 
     gui.line()
 
