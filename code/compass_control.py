@@ -4,6 +4,7 @@
 # Continuous move/resize machinery adapted from mouse.py.
 # """
 
+# # WIP - is this working?  -  'win move center 100 percent'
 # # WIP - split classes into generic versions that only understand rects and those that handle windows
 
 # # WIP - 'win snap 200 percent' moves rectangle up a bit, turns out talon resize() API will not increase
@@ -18,7 +19,7 @@ import threading
 import time
 
 from talon import ui, Module, ctrl #, Context, actions, imgui, cron, settings
-# from talon.types.point import Point2d
+from talon.types.point import Point2d
 # from talon.debug import log_exception
 
 # a type for representing compass directions
@@ -285,6 +286,10 @@ class CompassControl:
 
             result = horizontal_limit_reached = vertical_limit_reached = False
 
+            rect = rect_cc
+
+            print(f'move_pixels_relative: HERE - {self=}, {rect_cc=}, {rect_id=}, {parent_rect=}, {delta_x=}, {delta_y=}, {direction}')
+
             # start with the current values
             x = rect.x
             y = rect.y
@@ -307,7 +312,7 @@ class CompassControl:
                 if direction["down"]:
                     y += delta_y
 
-                new_x, new_y, horizontal_limit_reached, vertical_limit_reached = self._clip_to_fit(rect_cc, rect_id, x, y, rect.width, rect.height, direction)
+                new_x, new_y, horizontal_limit_reached, vertical_limit_reached = self._clip_to_fit(rect_cc, rect_id, parent_rect, x, y, rect.width, rect.height, direction)
             else:    # move to center
                 rect_width = rect.width
                 rect_height = rect.height
@@ -317,15 +322,15 @@ class CompassControl:
 
                 new_rect_center = Point2d(round(new_x + rect_width/2), round(new_y + rect_height/2))
 
-                target_x = parent.center.x - rect_width/2
-                target_y = parent.center.y - rect_height/2
+                target_x = parent_rect.center.x - rect_width/2
+                target_y = parent_rect.center.y - rect_height/2
 
                 # calculate distance between rectangle center and parent center
-                distance_x = parent.center.x - rect.center.x
-                distance_y = parent.center.y - rect.center.y
+                distance_x = parent_rect.center.x - rect.center.x
+                distance_y = parent_rect.center.y - rect.center.y
 
                 if testing:
-                    print(f'move_pixels_relative: {new_x=}, {new_y=}, {parent.center.x=}, {parent.center.y=}')
+                    print(f'move_pixels_relative: {new_x=}, {new_y=}, {parent_rect.center.x=}, {parent_rect.center.y=}')
                     print(f'move_pixels_relative: top left - {target_x=}, {target_y=}')
 
                 if (delta_x != 0):
@@ -717,7 +722,7 @@ class CompassControl:
 
             return round(y), round(height), resize_down_limit_reached
 
-        def resize_pixels_relative(self, rect_cc: ui.Rect, rect_id: int, delta_width: float, delta_height: float, direction_in: Direction) -> Tuple[bool, bool, bool, bool, bool]:
+        def resize_pixels_relative(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, delta_width: float, delta_height: float, direction_in: Direction) -> Tuple[bool, bool, bool, bool, bool]:
             start_time = time.time_ns()
 
             result = resize_left_limit_reached = resize_up_limit_reached = resize_right_limit_reached = resize_down_limit_reached = False
@@ -757,18 +762,18 @@ class CompassControl:
                 # apply changes as indicated
                 if direction["left"]:
                     new_x = new_x - delta_width
-                    new_x, new_width, resize_left_limit_reached = self._clip_left(rect_cc, rect_id, new_x, new_width, direction)
+                    new_x, new_width, resize_left_limit_reached = self._clip_left(rect, rect_id, parent_rect, new_x, new_width, direction)
                 #
                 if direction["up"]:
                     new_y = new_y - delta_height
-                    new_y, new_height, resize_up_limit_reached = self._clip_up(rect_cc, rect_id, new_y, new_height, direction)
+                    new_y, new_height, resize_up_limit_reached = self._clip_up(rect, rect_id, parent_rect, new_y, new_height, direction)
                 #
                 if direction["right"]:
-                    new_x, new_width, resize_right_limit_reached = self._clip_right(rect_cc, rect_id, new_x, new_width, direction)
+                    new_x, new_width, resize_right_limit_reached = self._clip_right(rect, rect_id, parent_rect, new_x, new_width, direction)
                 #
                 if direction["down"]:
                     new_height = new_height + delta_height
-                    new_y, new_height, resize_down_limit_reached = self._clip_down(rect_cc, rect_id, new_y, new_height, direction)
+                    new_y, new_height, resize_down_limit_reached = self._clip_down(rect, rect_id, parent_rect, new_y, new_height, direction)
 
             elif direction_count == 2:    # stretch diagonally
                 if direction["left"] and direction["up"]:
@@ -776,8 +781,8 @@ class CompassControl:
                     new_x = new_x - delta_width
                     new_y = new_y - delta_height
 
-                    new_x, new_width, resize_left_limit_reached = self._clip_left(rect_cc, rect_id, new_x, new_width, direction)
-                    new_y, new_height, resize_up_limit_reached = self._clip_up(rect_cc, rect_id, new_y, new_height, direction)
+                    new_x, new_width, resize_left_limit_reached = self._clip_left(rect, rect_id, parent_rect, new_x, new_width, direction)
+                    new_y, new_height, resize_up_limit_reached = self._clip_up(rect, rect_id, parent_rect, new_y, new_height, direction)
 
                     #print(f'resize_pixels_relative: left and up')
 
@@ -787,16 +792,16 @@ class CompassControl:
                     # adjust y to account for the entire change in height
                     new_y = new_y - delta_height
 
-                    new_x, new_width, resize_right_limit_reached = self._clip_right(rect_cc, rect_id, new_x, new_width, direction)
-                    new_y, new_height, resize_up_limit_reached = self._clip_up(rect_cc, rect_id, new_y, new_height, direction)
+                    new_x, new_width, resize_right_limit_reached = self._clip_right(rect, rect_id, parent_rect, new_x, new_width, direction)
+                    new_y, new_height, resize_up_limit_reached = self._clip_up(rect, rect_id, parent_rect, new_y, new_height, direction)
 
                     #print(f'resize_pixels_relative: right and up')
 
                 elif direction["right"] and direction["down"]:
                     # we are stretching southeast so the coordinates must not change for the northwestern corner,
                     # nothing to do here x and y are already set correctly for this case
-                    new_x, new_width, resize_right_limit_reached = self._clip_right(rect_cc, rect_id, new_x, new_width, direction)
-                    new_y, new_height, resize_down_limit_reached = self._clip_down(rect_cc, rect_id, new_y, new_height, direction)
+                    new_x, new_width, resize_right_limit_reached = self._clip_right(rect, rect_id, parent_rect, new_x, new_width, direction)
+                    new_y, new_height, resize_down_limit_reached = self._clip_down(rect, rect_id, parent_rect, new_y, new_height, direction)
 
                     #print(f'resize_pixels_relative: right and down')
 
@@ -805,8 +810,8 @@ class CompassControl:
                     # adjust x to account for the entire change in width
                     new_x = new_x - delta_width
 
-                    new_x, new_width, resize_left_limit_reached = self._clip_left(rect_cc, rect_id, new_x, new_width, direction)
-                    new_y, new_height, resize_down_limit_reached = self._clip_down(rect_cc, rect_id, new_y, new_height, direction)
+                    new_x, new_width, resize_left_limit_reached = self._clip_left(rect, rect_id, parent_rect, new_x, new_width, direction)
+                    new_y, new_height, resize_down_limit_reached = self._clip_down(rect, rect_id, parent_rect, new_y, new_height, direction)
 
                     #print(f'resize_pixels_relative: left and down')
 
@@ -836,19 +841,19 @@ class CompassControl:
 
                 if testing:
                     print(f'resize_pixels_relative: before left clip: {new_x=}, {new_width=}')
-                new_x, new_width, resize_left_limit_reached = self._clip_left(rect_cc, rect_id, new_x, new_width, direction)
+                new_x, new_width, resize_left_limit_reached = self._clip_left(rect, rect_id, parent_rect, new_x, new_width, direction)
                 if testing:
                     print(f'resize_pixels_relative: after left clip: {new_x=}, {new_width=}')
 
-                new_y, new_height, resize_up_limit_reached = self._clip_up(rect_cc, rect_id, new_y, new_height, direction)
+                new_y, new_height, resize_up_limit_reached = self._clip_up(rect, rect_id, parent_rect, new_y, new_height, direction)
 
                 if testing:
                     print(f'resize_pixels_relative: before right clip: {new_x=}, {new_width=}')
-                new_x, new_width, resize_right_limit_reached = self._clip_right(rect_cc, rect_id, new_x, new_width, direction)
+                new_x, new_width, resize_right_limit_reached = self._clip_right(rect, rect_id, parent_rect, new_x, new_width, direction)
                 if testing:
                     print(f'resize_pixels_relative: after right clip: {new_x=}, {new_width=}')
 
-                new_y, new_height, resize_down_limit_reached = self._clip_down(rect_cc, rect_id, new_y, new_height, direction)
+                new_y, new_height, resize_down_limit_reached = self._clip_down(rect, rect_id, parent_rect, new_y, new_height, direction)
 
                 #print(f'resize_pixels_relative: from center')
 
@@ -866,7 +871,7 @@ class CompassControl:
             result = False
             try:
                 # make it so
-                result = self.compass_control.set_rect(rect_cc, rect_id, ui.Rect(*new_values))
+                result = self.compass_control.set_rect(rect, rect_id, ui.Rect(*new_values))
             except CompassControl.RectUpdateError as e:
                 self.compass_control._handle_rect_update_error(e)
 
@@ -894,11 +899,11 @@ class CompassControl:
             return result, resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached
 
         def resize_absolute(self, rect_cc: ui.Rect, rect_id: int, target_width: float, target_height: float, region_in: Optional[Direction] = None) -> None:
-            x = rect.x
-            y = rect.y
+            x = rect_cc.x
+            y = rect_cc.y
 
-            delta_width = target_width - rect.width
-            delta_height = target_height - rect.height
+            delta_width = target_width - rect_cc.width
+            delta_height = target_height - rect_cc.height
 
             region = None
             if region_in:
@@ -927,8 +932,8 @@ class CompassControl:
                 self.compass_control._handle_rect_update_error(e)
 
             if testing:
-                print(f'resize_absolute: {rect=}')
-                ctrl.mouse_move(rect.x, rect.y)
+                print(f'resize_absolute: {rect_cc=}')
+                ctrl.mouse_move(rect_cc.x, rect_cc.y)
 
 
     # CompassControl methods
@@ -1090,7 +1095,7 @@ class CompassControl:
     def get_diagonal_length(self, rect: ui.Rect) -> float:
         return math.sqrt(((rect.width - rect.x) ** 2) + ((rect.height - rect.y) ** 2))
 
-    def get_center_to_center_rect(self, rect_cc: ui.Rect, rect_id: int, other_rect: ui.Rect) -> Tuple[ui.Rect, bool, bool]:
+    def get_center_to_center_rect(self, rect: ui.Rect, rect_id: int, other_rect: ui.Rect) -> Tuple[ui.Rect, bool, bool]:
         width = rect.width
         height = rect.y
 
@@ -1111,12 +1116,12 @@ class CompassControl:
 
     def get_component_dimensions(self, rect_cc: ui.Rect, rect_id: int, parent_rect: ui.Rect, distance: float, direction: Direction, operation: str) -> Tuple[int, int]:
         delta_width = delta_height = 0
-        rect = rect
+        rect = rect_cc
         direction_count = sum(direction.values())
         if operation == 'move' and direction_count == 4:    # move to center
             # this is a special case - 'move center' - we return signed values for this case
 
-            rect, horizontal_multiplier, vertical_multiplier = self.get_center_to_center_rect(w)
+            rect, horizontal_multiplier, vertical_multiplier = self.get_center_to_center_rect(rect_cc, rect_id, parent_rect)
             diagonal_length = self.get_diagonal_length(rect)
 
             rect_center = rect.center
@@ -1161,25 +1166,25 @@ class CompassControl:
 
         return round(delta_width), round(delta_height)
 
-    def get_component_dimensions_by_percent(self, rect_cc: ui.Rect, rect_id: int, percent: float, direction: Direction, operation: str) -> Tuple[int, int]:
+    def get_component_dimensions_by_percent(self, rect_cc: ui.Rect, rect_id: int, parent_rect: ui.Rect, percent: float, direction: Direction, operation: str) -> Tuple[int, int]:
         if testing:
             print(f'_get_component_dimensions_by_percent: {percent=}')
 
-        rect = rect
+        rect = rect_cc
         direction_count = sum(direction.values())
         if operation == 'move' and direction_count == 4:    # move to center
-            rect, *unused = self.get_center_to_center_rect(w)
+            rect, *unused = self.get_center_to_center_rect(rect, rect_id, parent_rect)
 
         if direction_count  == 1:    # horizontal or vertical
             if direction["left"] or direction["right"]:
                 distance = rect.width * (percent/100)
             elif direction["up"] or direction["down"]:
-                distance = diagonal_length * (percent/100)
+                distance =  rect.height * (percent/100)
         else:  # diagonal
             diagonal_length = self.get_diagonal_length(rect)
-            distance =  rect.height * (percent/100)
+            distance = diagonal_length * (percent/100)
 
-        return self.get_component_dimensions(rect_cc, rect_id, distance, direction, operation)
+        return self.get_component_dimensions(rect_cc, rect_id, parent_rect, distance, direction, operation)
 
     def _get_continuous_parameters(self, rect_cc: ui.Rect, rect_id: int, parent_rect: ui.Rect, rate_cps: float, dpi_x: float, dpi_y: float, direction: Direction, operation: str, frequency: str) -> Tuple[int, int]:
         if testing:
