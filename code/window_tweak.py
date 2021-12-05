@@ -4,11 +4,9 @@
 # Continuous move/resize machinery adapted from mouse.py.
 # """
 
-# # WIP - split classes into generic versions that only understand rects and those that handle windows
-
-# # WIP - 'win snap 200 percent' moves window up a bit, turns out talon resize() API will not increase
-# # WIP - height beyond 1625 for some reason...perhaps because the largest of my 3 screens is height 1600?
-# # WIP - 'win snap 1 percent' behaves oddly, try repro...
+# WIP - 'win snap 200 percent' moves window up a bit, turns out talon resize() API will not increase
+# WIP - height beyond 1625 for some reason...perhaps because the largest of my 3 screens is height 1600?
+# WIP - 'win snap 1 percent' behaves oddly, try repro...
 
 from typing import Optional, Dict #, Any, Dict, List, Tuple,  Iterator
 
@@ -39,7 +37,7 @@ class WinCompassControl:
         self.continuous_tag_name_qualified: str = 'user.' + self.continuous_tag_name
 
     @classmethod
-    def win_set_rect(cls, old_rect: ui.Rect, id: int, rect_in: ui.Rect) -> ui.Rect:
+    def win_set_rect(cls, old_rect: ui.Rect, rect_id: int, rect_in: ui.Rect) -> ui.Rect:
         start_time = time.time_ns()
         if not rect_in:
             raise ValueError('rect_in is None')
@@ -64,11 +62,11 @@ class WinCompassControl:
         # get window handle
         windows = ui.windows()
         for w in windows:
-            if w.id == id:
+            if w.id == rect_id:
                 break
         else:
             if settings.get('user.win_verbose_warnings') != 0:
-                logging.warning(f'_win_set_rect: invalid window id "{id}"')
+                logging.warning(f'_win_set_rect: invalid window id "{rect_id}"')
             return None            
             
         if testing:
@@ -131,7 +129,8 @@ class WinCompassControl:
                 position_matches_request = (rect_in.x, rect_in.y) == (w.rect.x, w.rect.y)
                 size_matches_request = (rect_in.width, rect_in.height) == (w.rect.width, w.rect.height)
                 if not position_matches_request or not size_matches_request:
-                    raise compass_control.RectUpdateError(requested=rect_in, actual=w.rect)
+                    # need to pass rect_id and old_rect here so they can be saved for 'win revert' usage
+                    raise compass_control.RectUpdateError(rect_id=rect_id, initial=old_rect, requested=rect_in, actual=w.rect)
 
                 # done with retry loop
                 break

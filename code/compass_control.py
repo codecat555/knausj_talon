@@ -4,11 +4,9 @@
 # Continuous move/resize machinery adapted from mouse.py.
 # """
 
-# # WIP - is this working?  -  'win move center 100 percent'
-# # WIP - split classes into generic versions that only understand rects and those that handle windows
-
-# # WIP - 'win snap 200 percent' moves rectangle up a bit, turns out talon resize() API will not increase
-# # WIP - height beyond 1625 for some reason...perhaps because the largest of my 3 screens is height 1600?
+# WIP - is this working?  -  'win move center 100 percent'
+# WIP - 'win snap 200 percent' moves rectangle up a bit, turns out talon resize() API will not increase
+# WIP - height beyond 1625 for some reason...perhaps because the largest of my 3 screens is height 1600?
 
 from typing import Any, Callable, Dict, List, Tuple, Optional, Iterator
 
@@ -30,7 +28,9 @@ testing: bool = True
 
 class CompassControl:
     class RectUpdateError(Exception):
-        def __init__(self, requested, actual):
+        def __init__(self, rect_id, initial,  requested, actual):
+            self.rect_id = rect_id
+            self.initial = initial
             self.requested = requested
             self.actual = actual
         
@@ -45,7 +45,7 @@ class CompassControl:
             if not size_matches_request:
                 logging.warning(f'after update, rectangle position does not exactly match request: {e.requested.x, e.requested.y} -> {e.actual.x, e.actual.y}')
 
-            self.save_last_rect()
+            self.save_last_rect(e.rect_id, e.initial)
 
     def __init__(self, continuous_tag_name: str, set_method: Callable, stop_method: Callable, move_frequency: str, resize_frequency: str, move_rate: float, resize_rate: float, verbose_warnings: int):
         # tag used to enable/disable commands used during continuous move/resize operations
@@ -1095,10 +1095,20 @@ class CompassControl:
 
         return round(target_x), round(target_y)
 
-    def save_last_rect(self):
+    def save_last_rect(self, id=None, rect=None):
+        if testing:
+            print(f'save_last_rect: {self}, {self.continuous_rect_id=}, {self.continuous_old_rect=}')
+            
+        if not id:
+            id=self.continuous_rect_id
+        if not rect:
+            rect=self.continuous_old_rect
+            
         self.last_rect = {
-            'id': self.continuous_rect_id,
-            'rect': self.continuous_old_rect
+            # 'id': self.continuous_rect_id,
+            # 'rect': self.continuous_old_rect
+            'id': id,
+            'rect': rect
         }
 
     def continuous_stop(self) -> None:
