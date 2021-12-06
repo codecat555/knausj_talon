@@ -4,6 +4,7 @@
 # Continuous move/resize machinery adapted from mouse.py.
 # """
 
+# WIP - 'win shrink' stops when the first dimension hits minimal instead of continuing with the second
 # WIP - 'win snap 200 percent' moves window up a bit, turns out talon resize() API will not increase
 # WIP - height beyond 1625 for some reason...perhaps because the largest of my 3 screens is height 1600?
 # WIP - 'win snap 1 percent' behaves oddly, try repro...
@@ -124,7 +125,6 @@ class WinCompassControl:
                     print(f'_win_set_rect: after: {w.rect}')
 
                 result = w.rect
-
 
                 position_matches_request = (rect_in.x, rect_in.y) == (w.rect.x, w.rect.y)
                 size_matches_request = (rect_in.width, rect_in.height) == (w.rect.width, w.rect.height)

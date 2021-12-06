@@ -154,22 +154,18 @@ class CompassControl:
                         cumulative_delta_x = cumulative_delta_y = 0
                         center_x = center_y = 0
                         while True:
+                            if testing:
+                                print(f'continuous_helper: current rectangle top left = {rect.x, rect.y}')
+                                
+                            (x, y) = (round(rect.x), round(rect.y))
                             try:
-                                print(f'continuous_helper: bresenham generator = {self.continuous_bres}')
-                # WIP - simplify this so we don't need the same code both before and inside the loop
-                                center_x, center_y = next(self.continuous_bres)
-                                # translate center coordinates to top left
-                                x, y = self.translate_top_left_by_region(rect, rect_id, center_x, center_y, self.compass_control.continuous_direction)
-                                if testing:
-                                        print(f'continuous_helper: next bresenham point = {center_x, center_y}, corresponding to top left = {x, y}')
-                                        print(f'continuous_helper: current rectangle top left = {rect.x, rect.y}')
                                 # skip until we see some movement
                                 while (x, y) == (round(rect.x), round(rect.y)):
                                     center_x, center_y = next(self.continuous_bres)
                                     # translate center coordinates to top left
                                     x, y = self.translate_top_left_by_region(rect, rect_id, center_x, center_y, self.compass_control.continuous_direction)
                                     if testing:
-                                        print(f'continuous_helper: skipped to next bresenham point = {center_x, center_y}, corresponding to top left = {x, y}')
+                                        print(f'continuous_helper: next bresenham point = {center_x, center_y}, corresponding to top left = {x, y}')
                             except StopIteration:
                                 if testing:
                                     print(f'continuous_helper: StopIteration')
@@ -1103,7 +1099,7 @@ class CompassControl:
             id=self.continuous_rect_id
         if not rect:
             rect=self.continuous_old_rect
-            
+
         self.last_rect = {
             # 'id': self.continuous_rect_id,
             # 'rect': self.continuous_old_rect
