@@ -5,6 +5,10 @@
 # """
 
 # WIP - is this working?  -  'win move center 100 percent'
+
+# WIP - need help with 'win shrink' automatic stop mechanism - resize_history approach fails because
+# WIP - set rect calls timeout when the window hits the minimum in one dimension
+
 # WIP - 'win snap 200 percent' moves rectangle up a bit, turns out talon resize() API will not increase
 # WIP - height beyond 1625 for some reason...perhaps because the largest of my 3 screens is height 1600?
 
@@ -40,10 +44,10 @@ class CompassControl:
             size_matches_request = (e.requested.width, e.requested.height) == (e.actual.width, e.actual.height)
 
             if not position_matches_request:
-                logging.warning(f'after update, rectangle size does not exactly match request: {e.requested.width, e.requested.height} -> {e.actual.width, e.actual.height}')
+                logging.warning(f'after update, rectangle position does not exactly match request: {e.requested.x, e.requested.y} -> {e.actual.x, e.actual.y}')
         
             if not size_matches_request:
-                logging.warning(f'after update, rectangle position does not exactly match request: {e.requested.x, e.requested.y} -> {e.actual.x, e.actual.y}')
+                logging.warning(f'after update, rectangle size does not exactly match request: {e.requested.width, e.requested.height} -> {e.actual.width, e.actual.height}')
 
             self.save_last_rect(e.rect_id, e.initial)
 
@@ -93,16 +97,16 @@ class CompassControl:
                 self.continuous_bres = None
 
         def continuous_helper(self) -> None:
-            def _move_it(rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, delta_x: float, delta_y: float, direction: Direction) -> ui.Rect:
-                result, horizontal_limit_reached, vertical_limit_reached = self.move_pixels_relative(rect, rect_id, parent_rect, delta_x, delta_y, self.compass_control.continuous_direction)
+            def _move_it(rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, delta_x: float, delta_y: float, direction: Direction) -> Tuple[bool, ui.Rect]:
+                result, rect, horizontal_limit_reached, vertical_limit_reached = self.move_pixels_relative(rect, rect_id, parent_rect, delta_x, delta_y, self.compass_control.continuous_direction)
                 if not result:
                     if testing:
-                        print(f'continuous_helper: rectangle move failed. {result=}, {horizontal_limit_reached=}, {vertical_limit_reached=}')
+                        print(f'continuous_helper: rectangle move failed. {result=}, {rect=}, {horizontal_limit_reached=}, {vertical_limit_reached=}')
                     self.compass_control.continuous_stop()
                     # return False
                 elif (horizontal_limit_reached and vertical_limit_reached):
                     if testing:
-                        print(f'continuous_helper: rectangle move is complete. {result=}, {horizontal_limit_reached=}, {vertical_limit_reached=}')
+                        print(f'continuous_helper: rectangle move is complete. {result=}, {rect=}, {horizontal_limit_reached=}, {vertical_limit_reached=}')
                     self.compass_control.continuous_stop()
                     result = None
                 else:
@@ -112,7 +116,7 @@ class CompassControl:
                     if vertical_limit_reached:
                         self.continuous_height_increment = 0
 
-                return result
+                return result, rect
 
             start_mutex_wait = time.time_ns()
 
@@ -133,6 +137,7 @@ class CompassControl:
                     return
 
                 # rect = self.compass_control.continuous_old_rect
+        # WIP - make sure this value (and others) are reset properly
                 rect = self.compass_control.continuous_rect
                 rect_id = self.compass_control.continuous_rect_id
                 parent_rect = self.compass_control.continuous_parent_rect
@@ -144,8 +149,9 @@ class CompassControl:
                     direction_count = sum(self.compass_control.continuous_direction.values())
                     if direction_count != 4:
                         # if not _move_it(rect, rect_id, parent_rect, self.continuous_width_increment, self.continuous_height_increment, self.compass_control.continuous_direction):
-                        self.compass_control.continuous_rect = _move_it(self.compass_control.continuous_rect, rect_id, parent_rect, self.continuous_width_increment, self.continuous_height_increment, self.compass_control.continuous_direction)
-                        if not self.compass_control.continuous_rect:
+                        result, rect = _move_it(rect, rect_id, parent_rect, self.continuous_width_increment, self.continuous_height_increment, self.compass_control.continuous_direction)
+                        self.compass_control.continuous_rect = rect
+                        if not result:
                             if testing:
                                 print(f'continuous_helper: move failed')
                     else:    # move to center (special case)
@@ -156,7 +162,7 @@ class CompassControl:
                         while True:
                             if testing:
                                 print(f'continuous_helper: current rectangle top left = {rect.x, rect.y}')
-                                
+
                             (x, y) = (round(rect.x), round(rect.y))
                             try:
                                 # skip until we see some movement
@@ -187,7 +193,8 @@ class CompassControl:
                                 print(f'continuous_helper: stepping from {rect.x, rect.y} to {x, y}, {delta_x=}, {delta_y=}')
 
                             print(f'continuous_helper: before move {rect=}')
-                            self.compass_control.continuous_rect = _move_it(self.compass_control.continuous_rect, rect_id, parent_rect, delta_x, delta_y, self.compass_control.continuous_direction)
+                            result, rect = _move_it(rect, rect_id, parent_rect, delta_x, delta_y, self.compass_control.continuous_direction)
+                            self.compass_control.continuous_rect = rect
                             if not rect:
                                 if testing:
                                     print(f'continuous_helper: move failed')
@@ -379,7 +386,7 @@ class CompassControl:
 
             try:
                 # make it so
-                result = self.compass_control.set_rect(rect, rect_id, ui.Rect(new_x, new_y, rect.width, rect.height))
+                result, rect = self.compass_control.set_rect(rect, rect_id, ui.Rect(new_x, new_y, rect.width, rect.height))
             except CompassControl.RectUpdateError as e:
                 self.compass_control._handle_rect_update_error(e)
 
@@ -387,7 +394,7 @@ class CompassControl:
             if testing:
                 print(f'move_pixels_relative: done {result=} ({elapsed_time_ms} ms)')
 
-            return result, horizontal_limit_reached, vertical_limit_reached
+            return result, rect, horizontal_limit_reached, vertical_limit_reached
 
         # note: this method is used by move_absolute(), which interprets the Direction
         # argument differently than elsewhere in this module.
@@ -453,7 +460,7 @@ class CompassControl:
 
             result = False
             try:
-                result = self.compass_control.set_rect(rect_cc, rect_id, ui.Rect(round(x), round(y), round(rect_cc.width), round(rect_cc.height)))
+                result, rect = self.compass_control.set_rect(rect_cc, rect_id, ui.Rect(round(x), round(y), round(rect_cc.width), round(rect_cc.height)))
             except CompassControl.RectUpdateError as e:
                 self.compass_control._handle_rect_update_error(e)
 
@@ -491,11 +498,18 @@ class CompassControl:
             self.continuous_job: Any = None
             self.continuous_alternation: str = None
 
+            # use window size history to detect when the window stops shrinking during resize,
+            # i.e. the minimum size has been reached and the resize operation should stop.
+            self.continuous_resize_history = []
+
+# WIP - double check all these values
         def _reset_continuous_flags(self) -> None:
             with self.compass_control.continuous_mutex:
                 self.continuous_width_increment = 0
                 self.continuous_height_increment = 0
                 self.continuous_job = None
+                self.continuous_alternation: str = None
+                self.continuous_resize_history = []
 
         def continuous_helper(self) -> None:
             start_mutex_wait = time.time_ns()
@@ -522,12 +536,31 @@ class CompassControl:
                     print(f'continuous_helper: starting iteration {iteration} - {rect=}')
 
                 if self.continuous_width_increment or self.continuous_height_increment:
-                    self.compass_control.continuous_rect, resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached = self.resize_pixels_relative(self.compass_control.continuous_rect, rect_id, parent_rect, self.continuous_width_increment, self.continuous_height_increment, self.compass_control.continuous_direction)
+                    result, rect, resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached = self.resize_pixels_relative(rect, rect_id, parent_rect, self.continuous_width_increment, self.continuous_height_increment, self.compass_control.continuous_direction)
+                    self.compass_control.continuous_rect = rect
 
-                    if not self.compass_control.continuous_rect:
-                        if testing:
-                            print(f'continuous_helper: rectangle resize failed. {self.compass_control.continuous_rect=}')
-                        self.compass_control.continuous_stop()
+                    if not result:
+                        # shrink is a special case, need to detect when the rectangle has shrunk to a minimum by
+                        # watching expected values to see when they stop changing as requested.
+                        if rect and self.continuous_width_increment < 0 and self.continuous_height_increment < 0:
+                            # check resize history
+                            value = (rect.width, rect.height)
+                            if len(self.continuous_resize_history) == 2:
+                                if value == self.continuous_resize_history[0] == self.continuous_resize_history[1]:
+                                    # window size has stopped changing...so quit trying
+                                    if testing:
+                                        print('_win_resize_continuous_helper: window size has stopped changing, quitting...')
+                                    self.compass_control.continuous_stop()
+                                else:
+                                    # chuck old data to make room for new data
+                                    self.continuous_resize_history.pop(0)
+                            #
+                            # update history
+                            self.continuous_resize_history.append(value)                        
+                        else:
+                            if testing:
+                                print(f'continuous_helper: rectangle resize failed. {rect=}')
+                            self.compass_control.continuous_stop()
                     else:
                         # check limits
                         direction_count = sum(self.compass_control.continuous_direction.values())
@@ -750,7 +783,7 @@ class CompassControl:
 
             return round(y), round(height), resize_down_limit_reached
 
-        def resize_pixels_relative(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, delta_width: float, delta_height: float, direction_in: Direction) -> Tuple[ui.Rect, bool, bool, bool, bool]:
+        def resize_pixels_relative(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, delta_width: float, delta_height: float, direction_in: Direction) -> Tuple[bool, ui.Rect, bool, bool, bool, bool]:
             start_time = time.time_ns()
 
             result = resize_left_limit_reached = resize_up_limit_reached = resize_right_limit_reached = resize_down_limit_reached = False
@@ -897,34 +930,40 @@ class CompassControl:
                 print(f'resize_pixels_relative: setting rect {new_values=}')
 
             result = False
+            old_rect = rect
             try:
                 # make it so
-                result = self.compass_control.set_rect(rect, rect_id, ui.Rect(*new_values))
+                result, rect = self.compass_control.set_rect(rect, rect_id, ui.Rect(*new_values))
             except CompassControl.RectUpdateError as e:
                 self.compass_control._handle_rect_update_error(e)
 
-            if not result:
-                # shrink is a special case, need to detect when the rectangle has shrunk to a minimum by
-                # watching expected values to see when they stop changing as requested.
-                if self.continuous_width_increment < 0:
-                    if rect.x != new_x or rect.width != new_width:
-                        resize_left_limit_reached = True
-                        resize_right_limit_reached = True
-                        if testing:
-                            print(f'resize_pixels_relative: horizontal shrink limit reached')
+            # if not result:
+            #     # shrink is a special case, need to detect when the rectangle has shrunk to a minimum by
+            #     # watching expected values to see when they stop changing as requested.
+            #     if self.continuous_width_increment < 0:
+            #         # if rect.x != new_x or rect.width != new_width:
+            #         # if a change was requested and not delivered
+            #         if (new_x != old_rect.x and rect.x == old_rect.x) and (new_width != old_rect.width and rect.width == old_rect.width):
+            #             resize_left_limit_reached = True
+            #             resize_right_limit_reached = True
+            #             if testing:
+            #                 # print(f'resize_pixels_relative: horizontal shrink limit reached')
+            #                 print(f'resize_pixels_relative: horizontal shrink limit reached - {rect.x=}, {new_x=}, {rect.width=}, {new_width=}')
 
-                if self.continuous_height_increment < 0:
-                    if rect.y != new_y or rect.height != new_height:
-                        resize_up_limit_reached = True
-                        resize_down_limit_reached = True
-                        if testing:
-                            print(f'resize_pixels_relative: vertical shrink limit reached')
+            #     if self.continuous_height_increment < 0:
+            #         # if rect.y != new_y or rect.height != new_height:
+            #         # if the requested value is not the same as the old one AND the requested value is not the same as the current value... 
+            #         if (new_y != old_rect.y and rect.y == old_rect.y) and (new_height != old_rect.height and rect.height == old_rect.height):
+            #             resize_up_limit_reached = True
+            #             resize_down_limit_reached = True
+            #             if testing:
+            #                 print(f'resize_pixels_relative: vertical shrink limit reached')
 
             elapsed_time_ms = (time.time_ns() - start_time) / 1e6
             if testing:
                 print(f'resize_pixels_relative: done ({elapsed_time_ms} ms)')
 
-            return result, resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached
+            return result, rect, resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached
 
         def resize_absolute(self, rect_cc: ui.Rect, rect_id: int, target_width: float, target_height: float, region_in: Optional[Direction] = None) -> None:
             x = rect_cc.x
@@ -955,7 +994,7 @@ class CompassControl:
 
             result = False
             try:
-                result = self.compass_control.set_rect(rect_cc, rect_id, ui.Rect(round(x), round(y), round(target_width), round(target_height)))
+                result, rect = self.compass_control.set_rect(rect_cc, rect_id, ui.Rect(round(x), round(y), round(target_width), round(target_height)))
             except CompassControl.RectUpdateError as e:
                 self.compass_control._handle_rect_update_error(e)
 
@@ -1016,7 +1055,7 @@ class CompassControl:
 
             result = False
             try:
-                result = self.set_rect(rect, rect_id, self.last_rect['rect'])
+                result, rect = self.set_rect(rect, rect_id, self.last_rect['rect'])
             except CompassControl.RectUpdateError as e:
                 self._handle_rect_update_error(e)            
 
@@ -1091,19 +1130,17 @@ class CompassControl:
 
         return round(target_x), round(target_y)
 
-    def save_last_rect(self, id=None, rect=None):
-        if testing:
-            print(f'save_last_rect: {self}, {self.continuous_rect_id=}, {self.continuous_old_rect=}')
+    def save_last_rect(self, rect_id=None, rect=None):
+        # if testing:
+        #     print(f'save_last_rect: {self}, {self.continuous_rect_id=}, {self.continuous_old_rect=}')
             
-        if not id:
-            id=self.continuous_rect_id
+        if not rect_id:
+            rect_id=self.continuous_rect_id
         if not rect:
             rect=self.continuous_old_rect
 
         self.last_rect = {
-            # 'id': self.continuous_rect_id,
-            # 'rect': self.continuous_old_rect
-            'id': id,
+            'id': rect_id,
             'rect': rect
         }
 
@@ -1276,7 +1313,7 @@ class CompassControl:
 
         return round(width_increment), round(height_increment)
 
-    def set_rect(self, old_rect: ui.Rect, rect_id: int, rect_in: ui.Rect) -> bool:
+    def set_rect(self, old_rect: ui.Rect, rect_id: int, rect_in: ui.Rect) -> Tuple[bool, ui.Rect]:
         # raise Exception('set_rect() must be implemented in context')
         set_method = self.set_method
         result = set_method(old_rect, rect_id, rect_in)
@@ -1440,3 +1477,15 @@ def compass_direction(m: List) -> Direction:
 #     def stop() -> None:
 #         "Stops current rectangle move/resize operation"
 #         compass_control.stop()
+
+# explicitly trigger re-import of dependent modules, since the talon reload mechanism won't do it
+DEPENDENTS = [ 'window_tweak.py' ]
+
+print(f'compass_control.py - triggering re-import of dependent modules: {DEPENDENTS}')
+    
+import os
+from pathlib import Path
+
+curdir = os.path.dirname(__file__)
+for dependent in DEPENDENTS:
+    Path(os.path.join(curdir, dependent)).touch()

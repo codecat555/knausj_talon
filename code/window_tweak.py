@@ -4,12 +4,13 @@
 # Continuous move/resize machinery adapted from mouse.py.
 # """
 
-# WIP - 'win shrink' stops when the first dimension hits minimal instead of continuing with the second
+# WIP - 'win shrink' stops when the first dimension hits minimum instead of continuing until the second also hits minimum
 # WIP - 'win snap 200 percent' moves window up a bit, turns out talon resize() API will not increase
 # WIP - height beyond 1625 for some reason...perhaps because the largest of my 3 screens is height 1600?
 # WIP - 'win snap 1 percent' behaves oddly, try repro...
 
-from typing import Optional, Dict #, Any, Dict, List, Tuple,  Iterator
+from typing import Optional, Dict, Tuple #, Any, Dict, List,  Iterator
+
 
 import queue
 import logging
@@ -38,7 +39,7 @@ class WinCompassControl:
         self.continuous_tag_name_qualified: str = 'user.' + self.continuous_tag_name
 
     @classmethod
-    def win_set_rect(cls, old_rect: ui.Rect, rect_id: int, rect_in: ui.Rect) -> ui.Rect:
+    def win_set_rect(cls, old_rect: ui.Rect, rect_id: int, rect_in: ui.Rect) -> Tuple[bool, ui.Rect]:
         start_time = time.time_ns()
         if not rect_in:
             raise ValueError('rect_in is None')
@@ -68,12 +69,13 @@ class WinCompassControl:
         else:
             if settings.get('user.win_verbose_warnings') != 0:
                 logging.warning(f'_win_set_rect: invalid window id "{rect_id}"')
-            return None            
+            return False, w.rect
             
         if testing:
             print(f'_win_set_rect: starting...{old_rect=}, {rect_in=}, {w.rect=}')
 
-        result = None
+        result = False, None
+
         while retries >= 0:
             event_count = 0
             if (rect_in.x, rect_in.y) != (w.rect.x, w.rect.y):
@@ -86,13 +88,14 @@ class WinCompassControl:
                 event_count += 1
             if event_count == 0:
                 # no real work to do
-                result = rect_in
+                result = True, rect_in
 
                 if testing:
                     print('_win_set_rect: nothing to do, window already matches given rect.')
 
                 break
 
+            # do it to it
             start_time_rect = time.time_ns()
             w.rect = rect_in
             try:
@@ -124,13 +127,13 @@ class WinCompassControl:
                     print(f'_win_set_rect: requested: {rect_in}')
                     print(f'_win_set_rect: after: {w.rect}')
 
-                result = w.rect
-
                 position_matches_request = (rect_in.x, rect_in.y) == (w.rect.x, w.rect.y)
                 size_matches_request = (rect_in.width, rect_in.height) == (w.rect.width, w.rect.height)
                 if not position_matches_request or not size_matches_request:
                     # need to pass rect_id and old_rect here so they can be saved for 'win revert' usage
                     raise compass_control.RectUpdateError(rect_id=rect_id, initial=old_rect, requested=rect_in, actual=w.rect)
+
+                result = True, w.rect
 
                 # done with retry loop
                 break
