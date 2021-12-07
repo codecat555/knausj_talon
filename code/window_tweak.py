@@ -4,13 +4,7 @@
 # Continuous move/resize machinery adapted from mouse.py.
 # """
 
-# WIP - 'win shrink' stops when the first dimension hits minimum instead of continuing until the second also hits minimum
-# WIP - 'win snap 200 percent' moves window up a bit, turns out talon resize() API will not increase
-# WIP - height beyond 1625 for some reason...perhaps because the largest of my 3 screens is height 1600?
-# WIP - 'win snap 1 percent' behaves oddly, try repro...
-
-from typing import Optional, Dict, Tuple #, Any, Dict, List,  Iterator
-
+from typing import Optional, Dict, Tuple
 
 import queue
 import logging
@@ -258,8 +252,6 @@ def on_ready():
             
 app.register("ready", on_ready)
 
-
-
 # @imgui.open(y=0)
 @imgui.open(x=4000,y=244)
 def _win_show_gui(gui: imgui.GUI) -> None:
@@ -353,8 +345,6 @@ class Actions:
 
     def win_stop() -> None:
         "Module action declaration for stopping current window move/resize operation"
-        # if testing:
-        #     print('win_stop() not implemented in current context')
         compass_control.continuous_stop()
 
     def win_move(direction: Optional[Direction] = None) -> None:
@@ -370,8 +360,6 @@ class Actions:
         "Move window to given absolute position, centered on the point indicated by the given region"
 
         w = ui.active_window()
-        # x = x_in
-        # y = y_in
 
         compass_control.mover.move_absolute(w.rect, w.id, x, y, region)
 
@@ -465,4 +453,4 @@ class Actions:
         "test modified bresenham algo"
 
         if num == 1:
-            compass_control.mover.test_bresenham_1()
+            compass_control.mover.test_bresenham()

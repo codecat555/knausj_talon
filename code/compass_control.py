@@ -1,5 +1,5 @@
 # """
-# Tools for managing the size and position of things using cardinal and ordinal directions, e.g. North, Southwest, etc.
+# Tools for managing the size and position of rectangles using cardinal and ordinal directions, e.g. North, Southwest, etc.
 
 # Continuous move/resize machinery adapted from mouse.py.
 # """
@@ -22,7 +22,6 @@ import time
 
 from talon import ui, Module, ctrl, cron, Context #, actions, imgui, settings
 from talon.types.point import Point2d
-# from talon.debug import log_exception
 
 # a type for representing compass directions
 Direction = Dict[str, bool]
@@ -103,7 +102,6 @@ class CompassControl:
                     if testing:
                         print(f'continuous_helper: rectangle move failed. {result=}, {rect=}, {horizontal_limit_reached=}, {vertical_limit_reached=}')
                     self.compass_control.continuous_stop()
-                    # return False
                 elif (horizontal_limit_reached and vertical_limit_reached):
                     if testing:
                         print(f'continuous_helper: rectangle move is complete. {result=}, {rect=}, {horizontal_limit_reached=}, {vertical_limit_reached=}')
@@ -136,7 +134,6 @@ class CompassControl:
                     # seems sometimes this gets called while the job is being canceled, so just return in that case
                     return
 
-                # rect = self.compass_control.continuous_old_rect
         # WIP - make sure this value (and others) are reset properly
                 rect = self.compass_control.continuous_rect
                 rect_id = self.compass_control.continuous_rect_id
@@ -148,7 +145,6 @@ class CompassControl:
                 if self.continuous_width_increment or self.continuous_height_increment:
                     direction_count = sum(self.compass_control.continuous_direction.values())
                     if direction_count != 4:
-                        # if not _move_it(rect, rect_id, parent_rect, self.continuous_width_increment, self.continuous_height_increment, self.compass_control.continuous_direction):
                         result, rect = _move_it(rect, rect_id, parent_rect, self.continuous_width_increment, self.continuous_height_increment, self.compass_control.continuous_direction)
                         self.compass_control.continuous_rect = rect
                         if not result:
@@ -225,7 +221,6 @@ class CompassControl:
                 elapsed_time_ms = (time.time_ns() - start_time) / 1e6
                 if testing:
                     print(f'continuous_helper: iteration {iteration} done ({elapsed_time_ms} ms)')
-                # frequency = float((self.move_frequency)[:-2])
                 if elapsed_time_ms > self.continuous_frequency:
                     if self.compass_control.verbose_warnings != 0:
                         logging.warning(f'continuous_helper: move iteration {iteration} took {elapsed_time_ms}ms, longer than the current move_frequency setting. actual rate may not match the continuous_rate setting.')
@@ -270,9 +265,6 @@ class CompassControl:
 
                     x1, y1 = self.compass_control.get_target_point(rect, rect_id, parent_rect, direction)
 
-                    x = x_prev = x0
-                    y = y_prev = y0
-
                     # note that this is based on the line from rectangle center to parent rectangle center, resulting
                     # coordinates will have to be translated to top left to set rectangle position, etc.
                     self.continuous_bres = self.compass_control.bresenham(x0, y0, x1, y1)
@@ -281,9 +273,6 @@ class CompassControl:
                     first = next(self.continuous_bres)
 
                 self._start_continuous()
-
-                # if self.hide_move_gui == 0:
-                #     _stop_gui.show()
 
         def _clip_to_fit(self, rect_cc: ui.Rect, rect_id: int, parent_rect: ui.Rect, x: float, y: float, width: float, height: float, direction: Direction) -> Tuple[int, int, bool, bool]:
             parent_x = parent_rect.x
@@ -316,8 +305,6 @@ class CompassControl:
 
             result = None
             horizontal_limit_reached = vertical_limit_reached = False
-
-            # print(f'move_pixels_relative: HERE - {self=}, {rect=}, {rect_id=}, {parent_rect=}, {delta_x=}, {delta_y=}, {direction}')
 
             # start with the current values
             x = rect.x
@@ -450,7 +437,7 @@ class CompassControl:
 
             return round(top_left_x), round(top_left_y)
 
-        def move_absolute(self, rect_cc: ui.Rect, rect_id: int, x: float, y: float, region_in: Optional[Direction] = None) -> None:
+        def move_absolute(self, rect_cc: ui.Rect, rect_id: int, x: float, y: float, region_in: Optional[Direction] = None) -> Tuple[bool, ui.Rect]:
             # find the point which we will move to the given coordinates, as indicated by the region.
             if region_in:
                 x, y = self.translate_top_left_by_region(rect_cc, rect_id, x, y, region_in)
@@ -468,7 +455,9 @@ class CompassControl:
                 print(f'move_absolute: {rect_cc=}')
                 ctrl.mouse_move(x, y)
 
-        def test_bresenham_1(self):
+            return result, rect
+
+        def test_bresenham(self):
             x0 = 0
             y0 = 0
             x1 = 100
@@ -527,7 +516,6 @@ class CompassControl:
                     # seems sometimes this gets called while the job is being canceled, so just return that case
                     return
 
-                # rect = self.compass_control.continuous_old_rect
                 rect = self.compass_control.continuous_rect
                 rect_id = self.compass_control.continuous_rect_id
                 parent_rect = self.compass_control.continuous_parent_rect
@@ -599,7 +587,6 @@ class CompassControl:
             elapsed_time_ms = (time.time_ns() - start_time) / 1e6
             if testing:
                 print(f'continuous_helper: iteration {iteration} done ({elapsed_time_ms} ms)')
-            # frequency = float(( self.continuous_frequency)[:-2])
             if elapsed_time_ms > self.continuous_frequency:
                 if self.compass_control.verbose_warnings != 0:
                     logging.warning(f'continuous_helper: resize iteration {iteration} took {elapsed_time_ms}ms, longer than the current resize_frequency setting. actual rate may not match the continuous_rate setting.')
@@ -1203,7 +1190,7 @@ class CompassControl:
         rect = rect_cc
         direction_count = sum(direction.values())
         if operation == 'move' and direction_count == 4:    # move to center
-            # this is a special case - 'move center' - we return signed values for this case
+            # this is a special case - 'move center' - we return signed values for this case only
 
             rect, horizontal_multiplier, vertical_multiplier = self.get_center_to_center_rect(rect_cc, rect_id, parent_rect)
             diagonal_length = self.get_diagonal_length(rect)
@@ -1314,7 +1301,6 @@ class CompassControl:
         return round(width_increment), round(height_increment)
 
     def set_rect(self, old_rect: ui.Rect, rect_id: int, rect_in: ui.Rect) -> Tuple[bool, ui.Rect]:
-        # raise Exception('set_rect() must be implemented in context')
         set_method = self.set_method
         result = set_method(old_rect, rect_id, rect_in)
         
@@ -1326,23 +1312,12 @@ class CompassControl:
 
         return result
 
-# # globals
-# compass_control = CompassControl()            
-
 ## talon stuff
 
 mod = Module()
 
-# mod.tag(compass_control.continuous_tag_name, desc="Enable stop command during continuous rectangle move/resize.")
-
 # # context used to enable/disable the tag for controlling whether the 'stop' command is active
 ctx = Context()
-
-# # context containing the stop command, enabled only when a continuous move/resize is running
-# ctx_stop = Context()
-# ctx_stop.matches = fr"""
-# tag: user.{compass_control.continuous_tag_name}
-# """
 
 # taken from https: //talon.wiki/unofficial_talon_docs/#captures
 @mod.capture(rule="center | ((north | south) [(east | west)] | east | west)")
@@ -1367,116 +1342,6 @@ def compass_direction(m: List) -> Direction:
         print(f'compass_direction: {result=}')
 
     return result
-
-# @mod.action_class
-# class Actions:
-#     def compass_control_show() -> None:
-#         "Shows information about current rectangle position and size"
-#         raise Exception('show action must be implemented in context')
-
-#     def compass_control_hide() -> None:
-#         "Hides the rectangle information window"
-#         raise Exception('show action must be implemented in context')
-
-#     def compass_control_stop() -> None:
-#         "Module action declaration for stopping current rectangle move/resize operation"
-#         if testing:
-#             print('stop action not implemented in current context')
-#         pass
-
-#     def compass_control_move(rect_cc: ui.Rect, rect_id: int, direction: Optional[Direction] = None) -> None:
-#         "Move rectangle in small increments in the given direction, until stopped"
-#         compass_control.mover.init_continuous(rect_cc, rect_id, direction)
-
-#     def compass_control_move_absolute(rect_cc: ui.Rect, rect_id: int, x_in: float, y_in: float, region: Optional[Direction] = None) -> None:
-#         "Move rectangle to given absolute position, centered on the point indicated by the given region"
-
-#         x = x_in
-#         y = y_in
-
-#         compass_control.mover.move_absolute(rect_cc, rect_id, x, y, region)
-
-#     def compass_control_stretch(rect_cc: ui.Rect, rect_id: int, direction: Optional[Direction] = None) -> None:
-#         "Stretch rectangle in small increments until stopped, optionally in the given direction"
-
-#         if not direction:
-#             direction = compass_direction(['center'])
-
-#         compass_control.sizer.init_continuous(rect_cc, rect_id, 1, direction)
-
-#     def compass_control_shrink(rect_cc: ui.Rect, rect_id: int, direction: Optional[Direction] = None) -> None:
-#         "Shrink rectangle in small increments until stopped, optionally in the given direction"
-
-#         if not direction:
-#             direction = compass_direction(['center'])
-
-#         compass_control.sizer.init_continuous(rect_cc, rect_id, -1, direction)
-
-#     def compass_control_resize_absolute(rect_cc: ui.Rect, rect_id: int, target_width: float, target_height: float, region: Optional[Direction] = None) -> None:
-#         "Size rectangle to given absolute dimensions, optionally by stretching/shrinking in the direction indicated by the given region"
-
-#         compass_control.sizer.resize_absolute(rect_cc, rect_id, target_width, target_height, region)
-
-#     def compass_control_move_pixels(rect_cc: ui.Rect, rect_id: int, distance: int, direction: Direction) -> None:
-#         "move rectangle some number of pixels"
-
-#         delta_width, delta_height = compass_control.get_component_dimensions(rect_cc, rect_id, distance, direction, 'move')
-
-#         return compass_control.mover.move_pixels_relative(rect_cc, rect_id, delta_width, delta_height, direction)
-
-#     def compass_control_move_percent(rect_cc: ui.Rect, rect_id: int, percent: float, direction: Direction) -> None:
-#         "move rectangle some percentage of the current size"
-
-#         delta_width, delta_height = compass_control.get_component_dimensions_by_percent(rect_cc, rect_id, percent, direction, 'move')
-
-#         return compass_control.mover.move_pixels_relative(rect_cc, rect_id, delta_width, delta_height, direction)
-
-#     def compass_control_resize_pixels(rect_cc: ui.Rect, rect_id: int, distance: int, direction: Direction) -> None:
-#         "change rectangle size by pixels"
-
-#         delta_width, delta_height = compass_control.get_component_dimensions(rect_cc, rect_id, distance, direction, 'resize')
-
-#         if testing:
-#             print(f'resize_pixels: {delta_width=}, {delta_height=}')
-
-#         compass_control.sizer.resize_pixels_relative(rect_cc, rect_id, delta_width, delta_height, direction)
-
-#     def compass_control_resize_percent(rect_cc: ui.Rect, rect_id: int, percent: float, direction: Direction) -> None:
-#         "change rectangle size by a percentage of current size"
-
-#         delta_width, delta_height = compass_control.get_component_dimensions_by_percent(rect_cc, rect_id, percent, direction, 'resize')
-
-#         if testing:
-#             print(f'resize_percent: {delta_width=}, {delta_height=}')
-
-#         compass_control.sizer.resize_pixels_relative(rect_cc, rect_id, delta_width, delta_height, direction)
-
-#     def compass_control_snap_percent(rect_cc: ui.Rect, rect_id: int, percent: int) -> None:
-#         "center rectangle and change size to given percentage of parent rectangle (in each direction)"
-
-#         direction = compass_direction(['center'])
-
-#         compass_control.snap(rect_cc, rect_id, percent, direction)
-
-#     def compass_control_revert(rect_cc: ui.Rect, rect_id: int) -> None:
-#         "restore current rectangle's last remembered size and position"
-
-#         compass_control.revert(w)
-    
-#     def compass_control_test_bresenham(num: int) -> None:
-#         "test modified bresenham algo"
-
-#         if num == 1:
-#             compass_control.mover.test_bresenham_1()
-
-# @ctx_stop.action_class("user")
-# class RectangleActions:
-#     """
-#     # Commands for controlling continuous rectangle move/resize operations
-#     """
-#     def stop() -> None:
-#         "Stops current rectangle move/resize operation"
-#         compass_control.stop()
 
 # explicitly trigger re-import of dependent modules, since the talon reload mechanism won't do it
 DEPENDENTS = [ 'window_tweak.py' ]
