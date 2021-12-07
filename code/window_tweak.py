@@ -69,7 +69,7 @@ class WinCompassControl:
             if settings.get('user.win_verbose_warnings') != 0:
                 logging.warning(f'_win_set_rect: invalid window id "{rect_id}"')
             return False, w.rect
-            
+
         if testing:
             print(f'_win_set_rect: starting...{old_rect=}, {rect_in=}, {w.rect=}')
 
@@ -117,7 +117,7 @@ class WinCompassControl:
                 else:
                     if testing:
                         print('_win_set_rect: no more retries, failed')
-                    
+
                     # no more retries
                     break
             else:
@@ -148,7 +148,7 @@ class WinCompassControl:
         return result
 
     def win_stop(self) -> None:
-        """Callback invoked by CompassControl engine after stopping a continuous operation"""        
+        """Callback invoked by CompassControl engine after stopping a continuous operation"""
         win_stop_gui.hide()
 
 # talon stuff
@@ -259,7 +259,7 @@ def on_ready():
             "Stops current window move/resize operation"
             compass_control.continuous_stop()
             _win_show_gui.hide()
-            
+
 app.register("ready", on_ready)
 
 # @imgui.open(y=0)
@@ -360,9 +360,9 @@ class Actions:
     def win_move(direction: Optional[Direction] = None) -> None:
         "Move window in small increments in the given direction, until stopped"
         w = ui.active_window()
-        
+
         compass_control.mover.init_continuous(w.rect, w.id, w.screen.visible_rect, w.screen.dpi_x, w.screen.dpi_y, direction)
-        
+
         if settings.get('user.win_hide_move_gui') == 0:
             win_stop_gui.show()
 
@@ -458,7 +458,7 @@ class Actions:
 
         w = ui.active_window()
         compass_control.revert(w.rect, w.id)
-    
+
     def win_test_bresenham(num: int) -> None:
         "Test modified bresenham algo"
 
