@@ -67,7 +67,7 @@ class WinCompassControl:
         if testing:
             print(f'_win_set_rect: starting...{old_rect=}, {rect_in=}, {w.rect=}')
 
-        result = False, None
+        result = False, old_rect
 
         while retries >= 0:
             event_count = 0

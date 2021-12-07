@@ -4,37 +4,12 @@
 # Continuous move/resize machinery adapted from mouse.py.
 # """
 
-# WIP - populate docstrings
-# WIP - reorder methods
+# WIP - remove bare print statements
+
 # WIP - test exception handling with error injection
 
 # WIP - why do continuous resize center operations not move at the same speed in both up
 # WIP - and down (left and right) directions?
-
-# WIP - seems continuous_bres is getting cleared too early:
-# 2021-12-06 23:58:14 ERROR cron interval error <bound method CompassControl.Mover.continuous_helper of <user.knausj_talon.code.compass_control.CompassControl.Mover object at 0x000000005367D310>>
-#     8:                              threading.py:930* # cron thread
-#     7:                              threading.py:973*
-#     6:                              threading.py:910*
-#     5:                             talon\cron.py:155|
-#     4:                             talon\cron.py:103|
-#     3:                   talon\scripting\rctx.py:233| # 'cron' user.knausj_talon.code.window_tweak:call()
-#     2:                             talon\cron.py:178| # [stack splice]
-#     1: user\knausj_talon\code\compass_control.py:193| center_x, center_y = next(self.continuous_bres)
-# TypeError: 'NoneType' object is not an iterator
-
-# WIP - seems continuous iterations continue even after a stop, leading to errors like this:
-# 2021-12-07 10:30:43 ERROR cron interval error <bound method CompassControl.Sizer._continuous_helper of <user.knausj_talon.code.compass_control.CompassControl.Sizer object at 0x000000006108C7F0>>
-#     9:                              threading.py:930* # cron thread
-#     8:                              threading.py:973*
-#     7:                              threading.py:910*
-#     6:                             talon\cron.py:155|
-#     5:                             talon\cron.py:103|
-#     4:                   talon\scripting\rctx.py:233| # 'cron' user.knausj_talon.code.window_tweak:call()
-#     3:                             talon\cron.py:178| # [stack splice]
-#     2: user\knausj_talon\code\compass_control.py:617| result, rect, resize_left_limit_reache..
-#     1: user\knausj_talon\code\compass_control.py:855| if (new_x != old_rect.x and rect.x == old_rect.x) and (new_width != old_rect.width and rect.width == old_rect.width):
-# AttributeError: 'NoneType' object has no attribute 'x'
 
 # WIP - continuous operations randomly stop, due to API timeouts (is it more frequent when debug logging is enabled?)
 
@@ -249,6 +224,7 @@ class CompassControl:
                         if not result:
                             if testing:
                                 print(f'continuous_helper: move failed')
+                            self.compass_control.continuous_stop()
                     else:    # move to center (special case)
                         initial_x = rect.x
                         initial_y = rect.y
@@ -287,14 +263,15 @@ class CompassControl:
                             if testing:
                                 print(f'continuous_helper: stepping from {rect.x, rect.y} to {x, y}, {delta_x=}, {delta_y=}')
 
-                            print(f'continuous_helper: before move {rect=}')
+                            # print(f'continuous_helper: before move {rect=}')
                             result, rect = _move_it(rect, rect_id, parent_rect, delta_x, delta_y, self.compass_control.continuous_direction)
                             self.compass_control.continuous_rect = rect
                             if not rect:
                                 if testing:
                                     print(f'continuous_helper: move failed')
-                                return
-                            print(f'continuous_helper: after move {rect=}')
+                                self.compass_control.continuous_stop()
+                                break
+                            # print(f'continuous_helper: after move {rect=}')
 
                             cumulative_delta_x = abs(rect.x - initial_x)
                             if testing:
