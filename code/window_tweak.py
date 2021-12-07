@@ -8,7 +8,6 @@ from typing import Optional, Dict, Tuple
 
 import queue
 import logging
-import threading
 import time
 
 from talon import ui, Module, Context, actions, ctrl, imgui, cron, settings, app
@@ -220,7 +219,8 @@ def win_stop_gui(gui: imgui.GUI) -> None:
 def on_ready():
     global win_compass_control, compass_control, ctx_stop
 
-    print(f"on_ready: {settings.get('user.win_continuous_move_rate')=}")
+    # if testing:
+    #     print(f"on_ready: {settings.get('user.win_continuous_move_rate')=}")
 
     win_compass_control= WinCompassControl()
     compass_control= CompassControl(
