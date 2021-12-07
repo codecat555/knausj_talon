@@ -17,7 +17,6 @@ import time
 
 from talon import ui, Module, Context, actions, ctrl, imgui, cron, settings, app
 from talon.types.point import Point2d
-# from talon.scripting.types import NameDecl
 from talon.debug import log_exception
 
 # globals
@@ -32,10 +31,8 @@ ctx_stop = None
 
 class WinCompassControl:
 
-    # def __init__(self, tag: NameDecl):
     def __init__(self, tag_name: str):
         # tag used to enable/disable commands used during window move/resize operations
-        # self.continuous_tag: NameDecl = tag
         self.continuous_tag_name: str = tag_name
         self.continuous_tag_name_qualified: str = 'user.' + self.continuous_tag_name
 
@@ -251,7 +248,7 @@ def on_ready():
     # context containing the stop command, enabled only when a continuous move/resize is running
     ctx_stop = Context()
     ctx_stop.matches = fr"""
-    tag: user.{win_compass_control.continuous_tag_name}
+    tag: user.{TAG_NAME}
     """
     @ctx_stop.action_class("user")
     class WindowTweakActions:

@@ -28,7 +28,6 @@
 # is the same as the physical rect size even though they are not really the same. Tried auto-hiding the 'taskbar',
 # no difference.
 
-
 from typing import Any, Callable, Dict, List, Tuple, Optional, Iterator
 
 import math
@@ -38,14 +37,12 @@ import time
 
 from talon import ui, Module, ctrl, cron, Context
 from talon.types.point import Point2d
-# from talon.scripting.types import NameDecl
 
 # a type for representing compass directions
 Direction = Dict[str, bool]
 
 class CompassControl:
 
-    # def __init__(self, continuous_tag: str, set_method: Callable, stop_method: Callable, move_frequency: str, resize_frequency: str, move_rate: float, resize_rate: float, verbose_warnings: int, testing: bool):
     def __init__(self, continuous_tag_name: str, set_method: Callable, stop_method: Callable, move_frequency: str, resize_frequency: str, move_rate: float, resize_rate: float, verbose_warnings: int, testing: bool):
 
         # turn debug messages on and off
@@ -60,7 +57,6 @@ class CompassControl:
         self.last_rect: Dict = dict()
 
         # tag used to enable/disable commands used to manage continuous move/resize operations, e.g. 'stop'
-        # self.continuous_tag: NameDecl = continuous_tag
         self.continuous_tag_name: str = continuous_tag_name
         self.continuous_tag_name_qualified: str = 'user.' + self.continuous_tag_name
         
@@ -1151,7 +1147,7 @@ class CompassControl:
 
         self.continuous_old_rect = old_rect
 
-    def get_edge_midpoint(self, rect0: ui.Rect, direction: Direction) -> Tuple[float, float]:
+    def get_edge_midpoint(self, rect: ui.Rect, direction: Direction) -> Tuple[float, float]:
         """Return midpoint of the rectangle edge indicated by the given direction"""
         
         x = y = None
