@@ -418,23 +418,23 @@ class CompassControl:
 
             return result, rect, horizontal_limit_reached, vertical_limit_reached
 
-        def move_absolute(self, rect_cc: ui.Rect, rect_id: int, x: float, y: float, region_in: Optional[Direction] = None) -> Tuple[bool, ui.Rect]:
+        def move_absolute(self, rect: ui.Rect, rect_id: int, x: float, y: float, region_in: Optional[Direction] = None) -> Tuple[bool, ui.Rect]:
             """Move rectangle in given direction to match the given values"""
             # find the point which we will move to the given coordinates, as indicated by the region.
             if region_in:
-                x, y = self.translate_top_left_by_region(rect_cc, rect_id, x, y, region_in)
+                x, y = self.translate_top_left_by_region(rect, rect_id, x, y, region_in)
 
                 if testing:
                     print(f'move_absolute: translated top left position: {x,y}')
 
             result = False
             try:
-                result, rect = self.compass_control.set_rect(rect_cc, rect_id, ui.Rect(round(x), round(y), round(rect_cc.width), round(rect_cc.height)))
+                result, rect = self.compass_control.set_rect(rect, rect_id, ui.Rect(round(x), round(y), round(rect.width), round(rect.height)))
             except CompassControl.RectUpdateError as e:
                 self.compass_control._handle_rect_update_error(e)
 
             if testing:
-                print(f'move_absolute: {rect_cc=}')
+                print(f'move_absolute: {rect=}')
                 ctrl.mouse_move(x, y)
 
             return result, rect
@@ -494,7 +494,7 @@ class CompassControl:
 
             return round(top_left_x), round(top_left_y)
 
-        def _clip_to_fit(self, rect_cc: ui.Rect, rect_id: int, parent_rect: ui.Rect, x: float, y: float, width: float, height: float, direction: Direction) -> Tuple[int, int, bool, bool]:
+        def _clip_to_fit(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, x: float, y: float, width: float, height: float, direction: Direction) -> Tuple[int, int, bool, bool]:
             """Adjust rectangle coordinates to keep it from overlapping the limits of the screen"""            
             parent_x = parent_rect.x
             parent_y = parent_rect.y
@@ -890,13 +890,13 @@ class CompassControl:
 
             return result, rect, resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached
 
-        def resize_absolute(self, rect_cc: ui.Rect, rect_id: int, target_width: float, target_height: float, region_in: Optional[Direction] = None) -> None:
+        def resize_absolute(self, rect: ui.Rect, rect_id: int, target_width: float, target_height: float, region_in: Optional[Direction] = None) -> None:
             """Change size in given direction to match the given values"""
-            x = rect_cc.x
-            y = rect_cc.y
+            x = rect.x
+            y = rect.y
 
-            delta_width = target_width - rect_cc.width
-            delta_height = target_height - rect_cc.height
+            delta_width = target_width - rect.width
+            delta_height = target_height - rect.height
 
             region = None
             if region_in:
@@ -913,20 +913,20 @@ class CompassControl:
                     region["up"] = region_in["down"]
                     region["down"] = region_in["up"]
 
-                x, y = self.translate_top_left_by_region(rect_cc, rect_id, target_width, target_height, region)
+                x, y = self.translate_top_left_by_region(rect, rect_id, target_width, target_height, region)
 
                 if testing:
                     print(f'resize_absolute: translated top left position: {x,y}')
 
             result = False
             try:
-                result, rect = self.compass_control.set_rect(rect_cc, rect_id, ui.Rect(round(x), round(y), round(target_width), round(target_height)))
+                result, rect = self.compass_control.set_rect(rect, rect_id, ui.Rect(round(x), round(y), round(target_width), round(target_height)))
             except CompassControl.RectUpdateError as e:
                 self.compass_control._handle_rect_update_error(e)
 
             if testing:
-                print(f'resize_absolute: {rect_cc=}')
-                ctrl.mouse_move(rect_cc.x, rect_cc.y)
+                print(f'resize_absolute: {rect=}')
+                ctrl.mouse_move(rect.x, rect.y)
         
         def translate_top_left_by_region(self, rect: ui.Rect, rect_id: int, target_width: float, target_height: float, direction: Direction) -> Tuple[int, int]:
             """This could figures out what the top left coordinates should be for resizing in the given direction"""
@@ -1007,7 +1007,7 @@ class CompassControl:
 
             return round(x), round(y)
        
-        def _clip_left(self, rect_cc: ui.Rect, rect_id: int, parent_rect: ui.Rect, x: float, width: float, direction: Direction) -> Tuple[int, int, bool]:
+        def _clip_left(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, x: float, width: float, direction: Direction) -> Tuple[int, int, bool]:
             """Adjust rectangle coordinates to keep it from overlapping the left limit of the screen"""
             resize_left_limit_reached = False
 
@@ -1026,7 +1026,7 @@ class CompassControl:
 
             return round(x), round(width), resize_left_limit_reached
 
-        def _clip_up(self, rect_cc: ui.Rect, rect_id: int, parent_rect: ui.Rect, y: float, height: float, direction: Direction) -> Tuple[int, int, bool]:
+        def _clip_up(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, y: float, height: float, direction: Direction) -> Tuple[int, int, bool]:
             """Adjust rectangle coordinates to keep it from overlapping the upper limit of the screen"""
             resize_up_limit_reached = False
 
@@ -1045,7 +1045,7 @@ class CompassControl:
 
             return round(y), round(height), resize_up_limit_reached
 
-        def _clip_right(self, rect_cc: ui.Rect, rect_id: int, parent_rect: ui.Rect, x: float, width: float, direction: Direction) -> Tuple[int, int, bool]:
+        def _clip_right(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, x: float, width: float, direction: Direction) -> Tuple[int, int, bool]:
             """Adjust rectangle coordinates to keep it from overlapping the right limit of the screen"""
             resize_right_limit_reached = False
 
@@ -1061,7 +1061,7 @@ class CompassControl:
 
             return round(x), round(width), resize_right_limit_reached
 
-        def _clip_down(self, rect_cc: ui.Rect, rect_id: int, parent_rect: ui.Rect, y: float, height: float, direction: Direction) -> Tuple[int, int, bool]:
+        def _clip_down(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, y: float, height: float, direction: Direction) -> Tuple[int, int, bool]:
             """Adjust rectangle coordinates to keep it from overlapping the lower limit of the screen"""
             resize_down_limit_reached = False
 
@@ -1154,7 +1154,7 @@ class CompassControl:
 
         self.continuous_old_rect = old_rect
 
-    def get_edge_midpoint(self, rect_cc: ui.Rect, direction: Direction) -> Tuple[float, float]:
+    def get_edge_midpoint(self, rect0: ui.Rect, direction: Direction) -> Tuple[float, float]:
         """Return midpoint of the rectangle edge indicated by the given direction"""
         
         x = y = None
@@ -1162,46 +1162,46 @@ class CompassControl:
         direction_count = sum(direction.values())
         if direction_count == 1:
             if direction['left']: # west
-                x = rect_cc.x
-                y = (rect_cc.y + rect_cc.height) // 2
+                x = rect.x
+                y = (rect.y + rect.height) // 2
             elif direction['up']: # north
-                x = (rect_cc.x + rect_cc.width) // 2
-                y = rect_cc.y
+                x = (rect.x + rect.width) // 2
+                y = rect.y
             elif direction['right']: # east
-                x = rect_cc.x + rect_cc.width
-                y = (rect_cc.y + rect_cc.height) // 2
+                x = rect.x + rect.width
+                y = (rect.y + rect.height) // 2
             elif direction['down']: # south
-                x = (rect_cc.x + rect_cc.width) // 2
-                y = rect_cc.y + rect_cc.height
+                x = (rect.x + rect.width) // 2
+                y = rect.y + rect.height
 
         return x, y
 
-    def get_corner(self, rect_cc: ui.Rect, direction: Direction) -> Tuple[float, float]:
+    def get_corner(self, rect: ui.Rect, direction: Direction) -> Tuple[float, float]:
         """Return coordinates of the rectangle corner indicated by the given direction"""
         x = y = None
 
         direction_count = sum(direction.values())
         if direction_count == 2:
             if direction['left'] and direction['up']: # northwest
-                x = rect_cc.x
-                y = rect_cc.y
+                x = rect.x
+                y = rect.y
             elif direction['right'] and direction['up']: # northeast
-                x = rect_cc.x + rect_cc.width
-                y = rect_cc.y
+                x = rect.x + rect.width
+                y = rect.y
             elif direction['right'] and direction['down']: # southeast
-                x = rect_cc.x + rect_cc.width
-                y = rect_cc.y + rect_cc.height
+                x = rect.x + rect.width
+                y = rect.y + rect.height
             elif direction['left'] and direction['down']: # southwest
-                x = rect_cc.x
-                y = rect_cc.y + rect_cc.height
+                x = rect.x
+                y = rect.y + rect.height
 
         return x, y
 
-    def get_center(self, rect_cc: ui.Rect) -> Tuple[float, float]:
+    def get_center(self, rect: ui.Rect) -> Tuple[float, float]:
         """Return coordinates of the rectangle center"""
-        return rect_cc.center.x, rect_cc.center.y
+        return rect.center.x, rect.center.y
 
-    def get_target_point(self, rect_cc: ui.Rect, rect_id: int, parent_rect: ui.Rect, direction: Direction) -> Tuple[int, int]:
+    def get_target_point(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, direction: Direction) -> Tuple[int, int]:
         """Return coordinates of the rectangle point indicated by the given direction"""
         target_x = target_y = None
 
@@ -1287,15 +1287,14 @@ class CompassControl:
 
         return center_to_center_rect, horizontal_multiplier, vertical_multiplier
 
-    def get_component_dimensions(self, rect_cc: ui.Rect, rect_id: int, parent_rect: ui.Rect, distance: float, direction: Direction, operation: str) -> Tuple[int, int]:
+    def get_component_dimensions(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, distance: float, direction: Direction, operation: str) -> Tuple[int, int]:
         """Return horizontal and vertical distances corresponding to the given distance along the diagonal of the given rectangle"""
         delta_width = delta_height = 0
-        rect = rect_cc
         direction_count = sum(direction.values())
         if operation == 'move' and direction_count == 4:    # move to center
             # this is a special case - 'move center' - we return signed values for this case only
 
-            rect, horizontal_multiplier, vertical_multiplier = self.get_center_to_center_rect(rect_cc, rect_id, parent_rect)
+            rect, horizontal_multiplier, vertical_multiplier = self.get_center_to_center_rect(rect, rect_id, parent_rect)
             diagonal_length = self.get_diagonal_length(rect)
 
             rect_center = rect.center
@@ -1340,12 +1339,11 @@ class CompassControl:
 
         return round(delta_width), round(delta_height)
 
-    def get_component_dimensions_by_percent(self, rect_cc: ui.Rect, rect_id: int, parent_rect: ui.Rect, percent: float, direction: Direction, operation: str) -> Tuple[int, int]:
+    def get_component_dimensions_by_percent(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, percent: float, direction: Direction, operation: str) -> Tuple[int, int]:
         """Return horizontal and vertical distances corresponding to the given percentage of the diagonal of the given rectangle"""
         if testing:
             print(f'_get_component_dimensions_by_percent: {percent=}')
 
-        rect = rect_cc
         direction_count = sum(direction.values())
         if operation == 'move' and direction_count == 4:    # move to center
             rect, *unused = self.get_center_to_center_rect(rect, rect_id, parent_rect)
@@ -1359,7 +1357,7 @@ class CompassControl:
             diagonal_length = self.get_diagonal_length(rect)
             distance = diagonal_length * (percent/100)
 
-        return self.get_component_dimensions(rect_cc, rect_id, parent_rect, distance, direction, operation)
+        return self.get_component_dimensions(rect, rect_id, parent_rect, distance, direction, operation)
 
     def _get_continuous_parameters(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, rate_cps: float, dpi_x: float, dpi_y: float, direction: Direction, operation: str, frequency: float) -> Tuple[int, int]:
         """Return horizontal and vertical increments to advance at each continuous iteration in order to match the given frequency, density and rate values"""
