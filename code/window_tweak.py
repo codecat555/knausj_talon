@@ -1,8 +1,13 @@
 # """
 # Tools for managing window size and position.
-
-# Continuous move/resize machinery adapted from mouse.py.
 # """
+
+# WIP - here are some quirks that need work:
+#
+# - 'win snap 200 percent' moves window up a bit when it should stay centered. may be a side-effect related to
+# talon resize() API behavior, which will not increase height beyond 1625 for some reason...perhaps related to
+# the height of the largest of my 3 screens (which is height 1600).
+#
 
 from typing import Optional, Dict, Tuple
 
@@ -12,13 +17,14 @@ import time
 
 from talon import ui, Module, Context, actions, ctrl, imgui, cron, settings, app
 from talon.types.point import Point2d
+# from talon.scripting.types import NameDecl
 from talon.debug import log_exception
 
 # globals
 from .compass_control import CompassControl, Direction, compass_direction
 
 # # turn debug messages on and off
-testing: bool = True
+testing: bool = False
 
 win_compass_control = None
 compass_control = None
@@ -26,13 +32,16 @@ ctx_stop = None
 
 class WinCompassControl:
 
-    def __init__(self):
+    # def __init__(self, tag: NameDecl):
+    def __init__(self, tag_name: str):
         # tag used to enable/disable commands used during window move/resize operations
-        self.continuous_tag_name: str = 'window_tweak_running'
+        # self.continuous_tag: NameDecl = tag
+        self.continuous_tag_name: str = tag_name
         self.continuous_tag_name_qualified: str = 'user.' + self.continuous_tag_name
 
     @classmethod
     def win_set_rect(cls, old_rect: ui.Rect, rect_id: int, rect_in: ui.Rect) -> Tuple[bool, ui.Rect]:
+        """Callback invoked by CompassControl engine for updating the window rect using talon API"""
         start_time = time.time_ns()
         if not rect_in:
             raise ValueError('rect_in is None')
@@ -142,13 +151,15 @@ class WinCompassControl:
         return result
 
     def win_stop(self) -> None:
+        """Callback invoked by CompassControl engine after stopping a continuous operation"""        
         win_stop_gui.hide()
 
 # talon stuff
 
 mod = Module()
 
-mod.tag('continuous tag name', desc="Enable stop command during continuous window move/resize.")
+TAG_NAME = 'window_tweak_running'
+tag = mod.tag(TAG_NAME, desc="Enable stop command during continuous window move/resize.")
 
 # context used to enable/disable window_tweak_running tag
 ctx = Context()
@@ -217,22 +228,24 @@ def win_stop_gui(gui: imgui.GUI) -> None:
         actions.user.win_stop()
 
 def on_ready():
+    """Callback invoked by Talon, where we populate our global objects"""
     global win_compass_control, compass_control, ctx_stop
 
     # if testing:
     #     print(f"on_ready: {settings.get('user.win_continuous_move_rate')=}")
 
-    win_compass_control= WinCompassControl()
+    win_compass_control= WinCompassControl(TAG_NAME)
+
     compass_control= CompassControl(
         win_compass_control.continuous_tag_name,
         win_compass_control.win_set_rect,
         win_compass_control.win_stop,
-        # CompassControl.win_stop,
         settings.get('user.win_move_frequency'),
         settings.get('user.win_resize_frequency'),
         settings.get('user.win_continuous_move_rate'),
         settings.get('user.win_continuous_resize_rate'),
-        settings.get('user.win_verbose_warnings')
+        settings.get('user.win_verbose_warnings'),
+        testing
     )
 
     # context containing the stop command, enabled only when a continuous move/resize is running
@@ -247,7 +260,7 @@ def on_ready():
         """
         def win_stop() -> None:
             "Stops current window move/resize operation"
-            compass_control.win_stop()
+            compass_control.continuous_stop()
             _win_show_gui.hide()
             
 app.register("ready", on_ready)
@@ -394,7 +407,7 @@ class Actions:
         compass_control.sizer.resize_absolute(w.rect, w.id, target_width, target_height, region)
 
     def win_move_pixels(distance: int, direction: Direction) -> None:
-        "move window some number of pixels"
+        "Move window some number of pixels"
 
         w = ui.active_window()
 
@@ -403,7 +416,7 @@ class Actions:
         return compass_control.mover.move_pixels_relative(w.rect, w.id, w.screen.visible_rect, delta_width, delta_height, direction)
 
     def win_move_percent(percent: float, direction: Direction) -> None:
-        "move window some percentage of the current size"
+        "Move window some percentage of the current size"
 
         w = ui.active_window()
 
@@ -412,7 +425,7 @@ class Actions:
         return compass_control.mover.move_pixels_relative(w.rect, w.id, w.screen.visible_rect, delta_width, delta_height, direction)
 
     def win_resize_pixels(distance: int, direction: Direction) -> None:
-        "change window size by pixels"
+        "Change window size by pixels"
         w = ui.active_window()
 
         delta_width, delta_height = compass_control.get_component_dimensions(w.rect, w.id, w.screen.visible_rect, distance, direction, 'resize')
@@ -423,7 +436,7 @@ class Actions:
         compass_control.sizer.resize_pixels_relative(w.rect, w.id, w.screen.visible_rect, delta_width, delta_height, direction)
 
     def win_resize_percent(percent: float, direction: Direction) -> None:
-        "change window size by a percentage of current size"
+        "Change window size by a percentage of current size"
 
         w = ui.active_window()
 
@@ -435,7 +448,7 @@ class Actions:
         compass_control.sizer.resize_pixels_relative(w.rect, w.id, w.screen.visible_rect, delta_width, delta_height, direction)
 
     def win_snap_percent(percent: int) -> None:
-        "center window and change size to given percentage of parent screen (in each direction)"
+        "Center window and change size to given percentage of parent screen (in each direction)"
 
         direction = compass_direction(['center'])
 
@@ -444,13 +457,13 @@ class Actions:
         compass_control.snap(w.rect, w.id, w.screen.visible_rect, percent, direction)
 
     def win_revert() -> None:
-        "restore current window's last remembered size and position"
+        "Restore current window's last remembered size and position"
 
         w = ui.active_window()
         compass_control.revert(w.rect, w.id)
     
     def win_test_bresenham(num: int) -> None:
-        "test modified bresenham algo"
+        "Test modified bresenham algo"
 
         if num == 1:
             compass_control.mover.test_bresenham()

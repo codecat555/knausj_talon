@@ -5,12 +5,6 @@ win show$:
 win hide$:
     user.win_hide()
 
-# could define this 'stop' command in a separate mode...entered by the
-# move_start()/resize_start() code and containing just the 'stop' command which, when
-# executed, would then restore the original mode after stopping the move/resize operation.
-win stop$:
-    user.win_stop()
-
 win move <user.compass_direction>$:
     user.win_move(compass_direction)
 
