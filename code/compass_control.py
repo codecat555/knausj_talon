@@ -6,6 +6,37 @@
 
 # WIP - populate docstrings
 # WIP - reorder methods
+# WIP - test exception handling with error injection
+
+# WIP - why do continuous resize center operations not move at the same speed in both up
+# WIP - and down (left and right) directions?
+
+# WIP - seems continuous_bres is getting cleared too early:
+# 2021-12-06 23:58:14 ERROR cron interval error <bound method CompassControl.Mover.continuous_helper of <user.knausj_talon.code.compass_control.CompassControl.Mover object at 0x000000005367D310>>
+#     8:                              threading.py:930* # cron thread
+#     7:                              threading.py:973*
+#     6:                              threading.py:910*
+#     5:                             talon\cron.py:155|
+#     4:                             talon\cron.py:103|
+#     3:                   talon\scripting\rctx.py:233| # 'cron' user.knausj_talon.code.window_tweak:call()
+#     2:                             talon\cron.py:178| # [stack splice]
+#     1: user\knausj_talon\code\compass_control.py:193| center_x, center_y = next(self.continuous_bres)
+# TypeError: 'NoneType' object is not an iterator
+
+# WIP - seems continuous iterations continue even after a stop, leading to errors like this:
+# 2021-12-07 10:30:43 ERROR cron interval error <bound method CompassControl.Sizer._continuous_helper of <user.knausj_talon.code.compass_control.CompassControl.Sizer object at 0x000000006108C7F0>>
+#     9:                              threading.py:930* # cron thread
+#     8:                              threading.py:973*
+#     7:                              threading.py:910*
+#     6:                             talon\cron.py:155|
+#     5:                             talon\cron.py:103|
+#     4:                   talon\scripting\rctx.py:233| # 'cron' user.knausj_talon.code.window_tweak:call()
+#     3:                             talon\cron.py:178| # [stack splice]
+#     2: user\knausj_talon\code\compass_control.py:617| result, rect, resize_left_limit_reache..
+#     1: user\knausj_talon\code\compass_control.py:855| if (new_x != old_rect.x and rect.x == old_rect.x) and (new_width != old_rect.width and rect.width == old_rect.width):
+# AttributeError: 'NoneType' object has no attribute 'x'
+
+# WIP - continuous operations randomly stop, due to API timeouts (is it more frequent when debug logging is enabled?)
 
 # WIP - need help with 'win shrink' automatic stop mechanism - resize_history approach fails because
 # WIP - calls to set_rect() time out when the window hits the minimum in one dimension, whereas the
@@ -114,16 +145,57 @@ class CompassControl:
             # if testing:
             #     print(f'Mover.__init__: {rate=}')
 
-        # reset variables used during continuous operations
-        def _reset_continuous(self) -> None:
+        def init_continuous(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, dpi_x: float, dpi_y: float, direction: Direction) -> None:
+            """Initialize continuous operation"""
             with self.compass_control.continuous_mutex:
-                self.continuous_width_increment = 0
-                self.continuous_height_increment = 0
-                self.continuous_job = None
-                self.continuous_bres = None
+                if self.continuous_job:
+                    if testing:
+                        print(f'init_continuous: {self.continuous_job=}')
+                    logging.warning('cannot start a move job when one is already running')
+                    return
 
-        # this is the engine that handles each continuous iteration
-        def continuous_helper(self) -> None:
+                self.compass_control._reset_continuous_flags()
+
+                self.compass_control.continuous_old_rect = rect
+                self.compass_control.continuous_rect = rect
+                self.compass_control.continuous_rect_id = rect_id
+                self.compass_control.continuous_parent_rect = parent_rect
+                self.compass_control.continuous_direction = direction
+                
+                print(f'init_continuous: {self.continuous_frequency_str=}')
+                self.continuous_width_increment, self.continuous_height_increment = self.compass_control._get_continuous_parameters(
+                                    rect, rect_id, parent_rect, self.continuous_rate, dpi_x, dpi_y, direction, 'move', self.continuous_frequency)
+
+                if testing:
+                    print(f'init_continuous: {self.continuous_width_increment=}, {self.continuous_height_increment=}')
+
+                direction_count = sum(self.compass_control.continuous_direction.values())
+                if direction_count == 4:    # move to center (special case)
+                    # follow path from rectangle center to parent rectangle center
+                    x0 = round(rect.center.x)
+                    y0 = round(rect.center.y)
+
+                    x1, y1 = self.compass_control.get_target_point(rect, rect_id, parent_rect, direction)
+
+                    # note that this is based on the line from rectangle center to parent rectangle center, resulting
+                    # coordinates will have to be translated to top left to set rectangle position, etc.
+                    self.continuous_bres = self.compass_control.bresenham(x0, y0, x1, y1)
+
+                    # discard initial point (we're already there)
+                    first = next(self.continuous_bres)
+
+                self._start_continuous()
+
+        def _start_continuous(self) -> None:
+            """Commence continuous operation"""
+            with self.compass_control.continuous_mutex:
+                ctx.tags = [self.compass_control.continuous_tag_name_qualified]
+                self.continuous_job = cron.interval(self.continuous_frequency_str, self._continuous_helper)
+                if testing:
+                    print(f'_start_continuous: {self.continuous_job=}')
+
+        def _continuous_helper(self) -> None:
+            """This is the engine that handles each continuous iteration"""
             def _move_it(rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, delta_x: float, delta_y: float, direction: Direction) -> Tuple[bool, ui.Rect]:
                 result, rect, horizontal_limit_reached, vertical_limit_reached = self.move_pixels_relative(rect, rect_id, parent_rect, delta_x, delta_y, self.compass_control.continuous_direction)
                 if not result:
@@ -253,85 +325,17 @@ class CompassControl:
                         logging.warning(f'continuous_helper: move iteration {iteration} took {elapsed_time_ms}ms, longer than the current move_frequency setting. actual rate may not match the continuous_rate setting.')
 
                 self.compass_control.continuous_iteration += 1
-            
-        # commence continuous operation
-        def _start_continuous(self) -> None:
+
+        def _reset_continuous(self) -> None:
+            """Reset variables used during continuous operations"""
             with self.compass_control.continuous_mutex:
-                ctx.tags = [self.compass_control.continuous_tag_name_qualified]
-                self.continuous_job = cron.interval(self.continuous_frequency_str, self.continuous_helper)
-                if testing:
-                    print(f'_start_continuous: {self.continuous_job=}')
+                self.continuous_width_increment = 0
+                self.continuous_height_increment = 0
+                self.continuous_job = None
+                self.continuous_bres = None
 
-        # initialize continuous operation
-        def init_continuous(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, dpi_x: float, dpi_y: float, direction: Direction) -> None:
-            with self.compass_control.continuous_mutex:
-                if self.continuous_job:
-                    if testing:
-                        print(f'init_continuous: {self.continuous_job=}')
-                    logging.warning('cannot start a move job when one is already running')
-                    return
-
-                self.compass_control._reset_continuous_flags()
-
-                self.compass_control.continuous_old_rect = rect
-                self.compass_control.continuous_rect = rect
-                self.compass_control.continuous_rect_id = rect_id
-                self.compass_control.continuous_parent_rect = parent_rect
-                self.compass_control.continuous_direction = direction
-                
-                print(f'init_continuous: {self.continuous_frequency_str=}')
-                self.continuous_width_increment, self.continuous_height_increment = self.compass_control._get_continuous_parameters(
-                                    rect, rect_id, parent_rect, self.continuous_rate, dpi_x, dpi_y, direction, 'move', self.continuous_frequency)
-
-                if testing:
-                    print(f'init_continuous: {self.continuous_width_increment=}, {self.continuous_height_increment=}')
-
-                direction_count = sum(self.compass_control.continuous_direction.values())
-                if direction_count == 4:    # move to center (special case)
-                    # follow path from rectangle center to parent rectangle center
-                    x0 = round(rect.center.x)
-                    y0 = round(rect.center.y)
-
-                    x1, y1 = self.compass_control.get_target_point(rect, rect_id, parent_rect, direction)
-
-                    # note that this is based on the line from rectangle center to parent rectangle center, resulting
-                    # coordinates will have to be translated to top left to set rectangle position, etc.
-                    self.continuous_bres = self.compass_control.bresenham(x0, y0, x1, y1)
-
-                    # discard initial point (we're already there)
-                    first = next(self.continuous_bres)
-
-                self._start_continuous()
-
-        # adjust rectangle coordinates to keep it from overlapping the limits of the screen
-        def _clip_to_fit(self, rect_cc: ui.Rect, rect_id: int, parent_rect: ui.Rect, x: float, y: float, width: float, height: float, direction: Direction) -> Tuple[int, int, bool, bool]:
-            parent_x = parent_rect.x
-            parent_y = parent_rect.y
-            parent_width = parent_rect.width
-            parent_height = parent_rect.height
-
-            horizontal_limit_reached = vertical_limit_reached = False
-
-            new_x = x
-            new_y = y
-            if x <= parent_x and direction["left"]:
-                new_x = parent_x
-                horizontal_limit_reached = True
-            elif x >= parent_x + parent_width - width and direction["right"]:
-                new_x = parent_x + parent_width - width
-                horizontal_limit_reached = True
-
-            if y <= parent_y and direction["up"]:
-                new_y = parent_y
-                vertical_limit_reached = True
-            elif y >= parent_y + parent_height - height and direction["down"]:
-                new_y = parent_y + parent_height - height
-                vertical_limit_reached = True
-
-            return round(new_x), round(new_y), horizontal_limit_reached, vertical_limit_reached
-
-        # move rectangle in given direction as indicated by the given delta values
         def move_pixels_relative(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, delta_x: float, delta_y: float, direction: Direction) -> Tuple[ui.Rect, bool, bool]:
+            """Move rectangle in given direction as indicated by the given delta values"""
             start_time = time.time_ns()
 
             result = None
@@ -414,11 +418,32 @@ class CompassControl:
 
             return result, rect, horizontal_limit_reached, vertical_limit_reached
 
-        # move rectangle in given direction to match the given values
-        # note: this method is used by move_absolute(), which interprets the Direction argument
-        # differently than elsewhere in this module.
-        def translate_top_left_by_region(self, rect: ui.Rect, rect_id: int, target_x: float, target_y: float, region_in: Direction) -> Tuple[int, int]:
+        def move_absolute(self, rect_cc: ui.Rect, rect_id: int, x: float, y: float, region_in: Optional[Direction] = None) -> Tuple[bool, ui.Rect]:
+            """Move rectangle in given direction to match the given values"""
+            # find the point which we will move to the given coordinates, as indicated by the region.
+            if region_in:
+                x, y = self.translate_top_left_by_region(rect_cc, rect_id, x, y, region_in)
 
+                if testing:
+                    print(f'move_absolute: translated top left position: {x,y}')
+
+            result = False
+            try:
+                result, rect = self.compass_control.set_rect(rect_cc, rect_id, ui.Rect(round(x), round(y), round(rect_cc.width), round(rect_cc.height)))
+            except CompassControl.RectUpdateError as e:
+                self.compass_control._handle_rect_update_error(e)
+
+            if testing:
+                print(f'move_absolute: {rect_cc=}')
+                ctrl.mouse_move(x, y)
+
+            return result, rect
+
+        def translate_top_left_by_region(self, rect: ui.Rect, rect_id: int, target_x: float, target_y: float, region_in: Direction) -> Tuple[int, int]:
+            """
+            Move rectangle in given direction to match the given values. Note: this method is used by move_absolute(),
+            which interprets the Direction argument differently than elsewhere in this module.
+            """
             width = rect.width
             height = rect.height
 
@@ -469,29 +494,35 @@ class CompassControl:
 
             return round(top_left_x), round(top_left_y)
 
-        # move rectangle in given direction to match the given values
-        def move_absolute(self, rect_cc: ui.Rect, rect_id: int, x: float, y: float, region_in: Optional[Direction] = None) -> Tuple[bool, ui.Rect]:
-            # find the point which we will move to the given coordinates, as indicated by the region.
-            if region_in:
-                x, y = self.translate_top_left_by_region(rect_cc, rect_id, x, y, region_in)
+        def _clip_to_fit(self, rect_cc: ui.Rect, rect_id: int, parent_rect: ui.Rect, x: float, y: float, width: float, height: float, direction: Direction) -> Tuple[int, int, bool, bool]:
+            """Adjust rectangle coordinates to keep it from overlapping the limits of the screen"""            
+            parent_x = parent_rect.x
+            parent_y = parent_rect.y
+            parent_width = parent_rect.width
+            parent_height = parent_rect.height
 
-                if testing:
-                    print(f'move_absolute: translated top left position: {x,y}')
+            horizontal_limit_reached = vertical_limit_reached = False
 
-            result = False
-            try:
-                result, rect = self.compass_control.set_rect(rect_cc, rect_id, ui.Rect(round(x), round(y), round(rect_cc.width), round(rect_cc.height)))
-            except CompassControl.RectUpdateError as e:
-                self.compass_control._handle_rect_update_error(e)
+            new_x = x
+            new_y = y
+            if x <= parent_x and direction["left"]:
+                new_x = parent_x
+                horizontal_limit_reached = True
+            elif x >= parent_x + parent_width - width and direction["right"]:
+                new_x = parent_x + parent_width - width
+                horizontal_limit_reached = True
 
-            if testing:
-                print(f'move_absolute: {rect_cc=}')
-                ctrl.mouse_move(x, y)
+            if y <= parent_y and direction["up"]:
+                new_y = parent_y
+                vertical_limit_reached = True
+            elif y >= parent_y + parent_height - height and direction["down"]:
+                new_y = parent_y + parent_height - height
+                vertical_limit_reached = True
 
-            return result, rect
-
-        # test code
+            return round(new_x), round(new_y), horizontal_limit_reached, vertical_limit_reached
+       
         def test_bresenham(self):
+            """Test code"""
             x0 = 0
             y0 = 0
             x1 = 100
@@ -530,17 +561,45 @@ class CompassControl:
             self.use_resize_history_for_shrink: bool = False
             self.use_change_check_for_shrink: bool = not self.use_resize_history_for_shrink
 
-        # reset variables used during continuous operations
-        def _reset_continuous(self) -> None:
+        def init_continuous(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, multiplier: int, dpi_x: float, dpi_y: float, direction: Optional[Direction] = None) -> None:
+            """Initialize continuous operation"""
             with self.compass_control.continuous_mutex:
-                self.continuous_width_increment = 0
-                self.continuous_height_increment = 0
-                self.continuous_job = None
-                self.continuous_alternation: str = None
-                self.continuous_resize_history = []
+                if self.continuous_job:
+                    logging.warning('cannot start a resize job when one is already running')
+                    return
 
-        # this is the engine that handles each continuous iteration
-        def continuous_helper(self) -> None:
+                # get vertical and horizontal step sizes, to match the rate and frequency settings
+                self.continuous_width_increment, self.continuous_height_increment = self.compass_control._get_continuous_parameters(
+                                    rect, rect_id, parent_rect, self.continuous_rate, dpi_x, dpi_y, direction, '_resize', self.continuous_frequency)
+
+                # apply multiplier to control whether we're stretching or shrinking
+                self.continuous_width_increment *= multiplier
+                self.continuous_height_increment *= multiplier
+
+                # initialize
+                self.compass_control.continuous_old_rect = rect
+                self.compass_control.continuous_rect = rect
+                self.compass_control.continuous_rect_id = rect_id
+                self.compass_control.continuous_parent_rect = parent_rect
+                self.compass_control.continuous_direction = direction
+
+                if testing:
+                    print(f'init_continuous: starting resize - {self.continuous_width_increment=}, {self.continuous_height_increment=}, {self.compass_control.continuous_direction=}, {multiplier=}')
+
+                # let it roll
+                self._start_continuous()
+                
+        def _start_continuous(self) -> None:
+            """Commence continuous operation"""
+            with self.compass_control.continuous_mutex:
+                # enable tag to enable the 'stop' command
+                ctx.tags = [self.compass_control.continuous_tag_name_qualified]
+
+                # start the job
+                self.continuous_job = cron.interval(self.continuous_frequency_str, self._continuous_helper)
+
+        def _continuous_helper(self) -> None:
+            """This is the engine that handles each continuous iteration"""
             start_mutex_wait = time.time_ns()
 
             with self.compass_control.continuous_mutex:
@@ -644,194 +703,17 @@ class CompassControl:
 
             self.compass_control.continuous_iteration += 1
 
-        # commence continuous operation
-        def _start_continuous(self) -> None:
+        def _reset_continuous(self) -> None:
+            """Reset variables used during continuous operations"""
             with self.compass_control.continuous_mutex:
-                # enable tag to enable the 'stop' command
-                ctx.tags = [self.compass_control.continuous_tag_name_qualified]
+                self.continuous_width_increment = 0
+                self.continuous_height_increment = 0
+                self.continuous_job = None
+                self.continuous_alternation: str = None
+                self.continuous_resize_history = []
 
-                # start the job
-                self.continuous_job = cron.interval(self.continuous_frequency_str, self.continuous_helper)
-
-        # initialize continuous operation
-        def init_continuous(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, multiplier: int, dpi_x: float, dpi_y: float, direction: Optional[Direction] = None) -> None:
-            with self.compass_control.continuous_mutex:
-                if self.continuous_job:
-                    logging.warning('cannot start a resize job when one is already running')
-                    return
-
-                # get vertical and horizontal step sizes, to match the rate and frequency settings
-                self.continuous_width_increment, self.continuous_height_increment = self.compass_control._get_continuous_parameters(
-                                    rect, rect_id, parent_rect, self.continuous_rate, dpi_x, dpi_y, direction, '_resize', self.continuous_frequency)
-
-                # apply multiplier to control whether we're stretching or shrinking
-                self.continuous_width_increment *= multiplier
-                self.continuous_height_increment *= multiplier
-
-                # initialize
-                self.compass_control.continuous_old_rect = rect
-                self.compass_control.continuous_rect = rect
-                self.compass_control.continuous_rect_id = rect_id
-                self.compass_control.continuous_parent_rect = parent_rect
-                self.compass_control.continuous_direction = direction
-
-                if testing:
-                    print(f'init_continuous: starting resize - {self.continuous_width_increment=}, {self.continuous_height_increment=}, {self.compass_control.continuous_direction=}, {multiplier=}')
-
-                # let it roll
-                self._start_continuous()
-
-        # this could figures out what the top left coordinates should be for resizing in the given direction
-        def translate_top_left_by_region(self, rect: ui.Rect, rect_id: int, target_width: float, target_height: float, direction: Direction) -> Tuple[int, int]:
-
-            x = rect.x
-            y = rect.y
-
-            delta_width = target_width - rect.width
-            delta_height = target_height - rect.height
-
-            if self.compass_control.verbose_warnings != 0:
-                if abs(delta_width) < 2:
-                    logging.warning(f'_translate_top_left_by_region: width change is less than 2, which is too small for normal resize calculations, ymmv: {delta_width=}')
-                if abs(delta_height) < 2:
-                    logging.warning(f'_translate_top_left_by_region: height change is less than 2, which is too small for normal resize calculations, ymmv: {delta_height=}')
-
-            if testing:
-                print(f"_translate_top_left_by_region: initial rect: {rect}")
-                print(f"_translate_top_left_by_region: resize coordinates: {target_width=}, {target_height=}")
-
-            direction_count = sum(direction.values())
-            if direction_count == 1:
-                if direction["left"]:
-                    # stretching west, x coordinate must not change for the eastern corners, so push top left to the west
-                    x = x - delta_width
-
-                    # adjust y to account for half the change in height
-                    y = y - delta_height / 2
-
-                elif direction["up"]:
-                    # stretching north, y coordinate must not change for the southern corners,
-                    # adjust x to account for half the change in width
-                    x = x - delta_width / 2
-
-                    # adjust y to account for the entire change in height
-                    y = y - delta_height
-
-                elif direction["right"]:
-                    # we are stretching east, so the x coordinate must not change for the western corners, i.e. top left
-
-                    # adjust y to account for half the change in height
-                    y = y - delta_height / 2
-
-                elif direction["down"]:
-                    # stretching south, y coordinate must not change for the northern corners, i.e. top left
-
-                    # adjust x to account for half the change in width
-                    x = x - delta_width / 2
-
-            elif direction_count == 2:
-                if direction["left"] and direction["up"]:
-                    # we are stretching northwest so the coordinates must not change for the southeastern corner
-                    x = x - delta_width
-                    y = y - delta_height
-
-                elif direction["right"] and direction["up"]:
-                    # we are stretching northeast so the coordinates must not change for the southwestern corner,
-                    # adjust y to account for the entire change in height
-                    y = y - delta_height
-
-                elif direction["right"] and direction["down"]:
-                    # we are stretching southeast so the coordinates must not change for the northwestern corner,
-                    # nothing to do here x and y are already set correctly for this case
-                    pass
-
-                elif direction["left"] and direction["down"]:
-                    # we are stretching southwest so the coordinates must not change for the northeastern corner,
-                    # adjust x to account for the entire change in width
-                    x = x - delta_width
-
-            elif direction_count == 4:
-                # resize in all directions
-                x = x - delta_width / 2
-                y = y - delta_height / 2
-
-            if testing:
-                print(f"_translate_top_left_by_region: translated position: {x=}, {y=}, {target_width=}, {target_height=}")
-
-            return round(x), round(y)
-
-        # adjust rectangle coordinates to keep it from overlapping the left limit of the screen
-        def _clip_left(self, rect_cc: ui.Rect, rect_id: int, parent_rect: ui.Rect, x: float, width: float, direction: Direction) -> Tuple[int, int, bool]:
-            resize_left_limit_reached = False
-
-            # clip to parent rectangle
-            if x < parent_rect.x and direction['left']:
-                # print(f'_clip_left: left clipping')
-
-                # update width before updating new_x
-                width = width - (x - parent_rect.x)
-                x = parent_rect.x
-
-                resize_left_limit_reached = True
-
-                if testing:
-                    print(f'_clip_left: {resize_left_limit_reached=}')
-
-            return round(x), round(width), resize_left_limit_reached
-
-        # adjust rectangle coordinates to keep it from overlapping the upper limit of the screen
-        def _clip_up(self, rect_cc: ui.Rect, rect_id: int, parent_rect: ui.Rect, y: float, height: float, direction: Direction) -> Tuple[int, int, bool]:
-            resize_up_limit_reached = False
-
-            # clip to parent rectangle
-            if y < parent_rect.y and direction['up']:
-                # print(f'_clip_up: up clipping')
-
-                # update height before updating y
-                height = height - (parent_rect.y - y)
-                y = parent_rect.y
-
-                resize_up_limit_reached = True
-
-                if testing:
-                    print(f'_clip_up: {resize_up_limit_reached=}')
-
-            return round(y), round(height), resize_up_limit_reached
-
-        # adjust rectangle coordinates to keep it from overlapping the right limit of the screen
-        def _clip_right(self, rect_cc: ui.Rect, rect_id: int, parent_rect: ui.Rect, x: float, width: float, direction: Direction) -> Tuple[int, int, bool]:
-            resize_right_limit_reached = False
-
-            if x + width > parent_rect.x + parent_rect.width and direction['right']:
-                # print(f'_clip_right: right clipping')
-
-                width = parent_rect.x + parent_rect.width - x
-
-                if testing:
-                    print(f'_clip_right: {resize_right_limit_reached=}')
-
-                resize_right_limit_reached = True
-
-            return round(x), round(width), resize_right_limit_reached
-
-        # adjust rectangle coordinates to keep it from overlapping the lower limit of the screen
-        def _clip_down(self, rect_cc: ui.Rect, rect_id: int, parent_rect: ui.Rect, y: float, height: float, direction: Direction) -> Tuple[int, int, bool]:
-            resize_down_limit_reached = False
-
-            if y + height > parent_rect.y + parent_rect.height and direction['down']:
-                # print(f'_clip_down: down clipping')
-
-                height = parent_rect.y + parent_rect.height - y
-
-                resize_down_limit_reached = True
-
-                if testing:
-                    print(f'_clip_right: {resize_down_limit_reached=}')
-
-            return round(y), round(height), resize_down_limit_reached
-
-        # change size in given direction as indicated by the given delta values
         def resize_pixels_relative(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, delta_width: float, delta_height: float, direction_in: Direction) -> Tuple[bool, ui.Rect, bool, bool, bool, bool]:
+            """Change size in given direction as indicated by the given delta values"""
             start_time = time.time_ns()
 
             result = resize_left_limit_reached = resize_up_limit_reached = resize_right_limit_reached = resize_down_limit_reached = False
@@ -1008,8 +890,8 @@ class CompassControl:
 
             return result, rect, resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached
 
-        # change size in given direction to match the given values
         def resize_absolute(self, rect_cc: ui.Rect, rect_id: int, target_width: float, target_height: float, region_in: Optional[Direction] = None) -> None:
+            """Change size in given direction to match the given values"""
             x = rect_cc.x
             y = rect_cc.y
 
@@ -1045,6 +927,155 @@ class CompassControl:
             if testing:
                 print(f'resize_absolute: {rect_cc=}')
                 ctrl.mouse_move(rect_cc.x, rect_cc.y)
+        
+        def translate_top_left_by_region(self, rect: ui.Rect, rect_id: int, target_width: float, target_height: float, direction: Direction) -> Tuple[int, int]:
+            """This could figures out what the top left coordinates should be for resizing in the given direction"""
+
+            x = rect.x
+            y = rect.y
+
+            delta_width = target_width - rect.width
+            delta_height = target_height - rect.height
+
+            if self.compass_control.verbose_warnings != 0:
+                if abs(delta_width) < 2:
+                    logging.warning(f'_translate_top_left_by_region: width change is less than 2, which is too small for normal resize calculations, ymmv: {delta_width=}')
+                if abs(delta_height) < 2:
+                    logging.warning(f'_translate_top_left_by_region: height change is less than 2, which is too small for normal resize calculations, ymmv: {delta_height=}')
+
+            if testing:
+                print(f"_translate_top_left_by_region: initial rect: {rect}")
+                print(f"_translate_top_left_by_region: resize coordinates: {target_width=}, {target_height=}")
+
+            direction_count = sum(direction.values())
+            if direction_count == 1:
+                if direction["left"]:
+                    # stretching west, x coordinate must not change for the eastern corners, so push top left to the west
+                    x = x - delta_width
+
+                    # adjust y to account for half the change in height
+                    y = y - delta_height / 2
+
+                elif direction["up"]:
+                    # stretching north, y coordinate must not change for the southern corners,
+                    # adjust x to account for half the change in width
+                    x = x - delta_width / 2
+
+                    # adjust y to account for the entire change in height
+                    y = y - delta_height
+
+                elif direction["right"]:
+                    # we are stretching east, so the x coordinate must not change for the western corners, i.e. top left
+
+                    # adjust y to account for half the change in height
+                    y = y - delta_height / 2
+
+                elif direction["down"]:
+                    # stretching south, y coordinate must not change for the northern corners, i.e. top left
+
+                    # adjust x to account for half the change in width
+                    x = x - delta_width / 2
+
+            elif direction_count == 2:
+                if direction["left"] and direction["up"]:
+                    # we are stretching northwest so the coordinates must not change for the southeastern corner
+                    x = x - delta_width
+                    y = y - delta_height
+
+                elif direction["right"] and direction["up"]:
+                    # we are stretching northeast so the coordinates must not change for the southwestern corner,
+                    # adjust y to account for the entire change in height
+                    y = y - delta_height
+
+                elif direction["right"] and direction["down"]:
+                    # we are stretching southeast so the coordinates must not change for the northwestern corner,
+                    # nothing to do here x and y are already set correctly for this case
+                    pass
+
+                elif direction["left"] and direction["down"]:
+                    # we are stretching southwest so the coordinates must not change for the northeastern corner,
+                    # adjust x to account for the entire change in width
+                    x = x - delta_width
+
+            elif direction_count == 4:
+                # resize in all directions
+                x = x - delta_width / 2
+                y = y - delta_height / 2
+
+            if testing:
+                print(f"_translate_top_left_by_region: translated position: {x=}, {y=}, {target_width=}, {target_height=}")
+
+            return round(x), round(y)
+       
+        def _clip_left(self, rect_cc: ui.Rect, rect_id: int, parent_rect: ui.Rect, x: float, width: float, direction: Direction) -> Tuple[int, int, bool]:
+            """Adjust rectangle coordinates to keep it from overlapping the left limit of the screen"""
+            resize_left_limit_reached = False
+
+            # clip to parent rectangle
+            if x < parent_rect.x and direction['left']:
+                # print(f'_clip_left: left clipping')
+
+                # update width before updating new_x
+                width = width - (x - parent_rect.x)
+                x = parent_rect.x
+
+                resize_left_limit_reached = True
+
+                if testing:
+                    print(f'_clip_left: {resize_left_limit_reached=}')
+
+            return round(x), round(width), resize_left_limit_reached
+
+        def _clip_up(self, rect_cc: ui.Rect, rect_id: int, parent_rect: ui.Rect, y: float, height: float, direction: Direction) -> Tuple[int, int, bool]:
+            """Adjust rectangle coordinates to keep it from overlapping the upper limit of the screen"""
+            resize_up_limit_reached = False
+
+            # clip to parent rectangle
+            if y < parent_rect.y and direction['up']:
+                # print(f'_clip_up: up clipping')
+
+                # update height before updating y
+                height = height - (parent_rect.y - y)
+                y = parent_rect.y
+
+                resize_up_limit_reached = True
+
+                if testing:
+                    print(f'_clip_up: {resize_up_limit_reached=}')
+
+            return round(y), round(height), resize_up_limit_reached
+
+        def _clip_right(self, rect_cc: ui.Rect, rect_id: int, parent_rect: ui.Rect, x: float, width: float, direction: Direction) -> Tuple[int, int, bool]:
+            """Adjust rectangle coordinates to keep it from overlapping the right limit of the screen"""
+            resize_right_limit_reached = False
+
+            if x + width > parent_rect.x + parent_rect.width and direction['right']:
+                # print(f'_clip_right: right clipping')
+
+                width = parent_rect.x + parent_rect.width - x
+
+                if testing:
+                    print(f'_clip_right: {resize_right_limit_reached=}')
+
+                resize_right_limit_reached = True
+
+            return round(x), round(width), resize_right_limit_reached
+
+        def _clip_down(self, rect_cc: ui.Rect, rect_id: int, parent_rect: ui.Rect, y: float, height: float, direction: Direction) -> Tuple[int, int, bool]:
+            """Adjust rectangle coordinates to keep it from overlapping the lower limit of the screen"""
+            resize_down_limit_reached = False
+
+            if y + height > parent_rect.y + parent_rect.height and direction['down']:
+                # print(f'_clip_down: down clipping')
+
+                height = parent_rect.y + parent_rect.height - y
+
+                resize_down_limit_reached = True
+
+                if testing:
+                    print(f'_clip_right: {resize_down_limit_reached=}')
+
+            return round(y), round(height), resize_down_limit_reached
 
 
     # CompassControl methods
@@ -1083,8 +1114,8 @@ class CompassControl:
                 D -= 2*dx
             D += 2*dy
 
-    # reset variables used during continuous operations
     def _reset_continuous_flags(self) -> None:
+        """Reset variables used during continuous operations"""
         with self.continuous_mutex:
             self.mover._reset_continuous()
             self.sizer._reset_continuous()
@@ -1096,8 +1127,8 @@ class CompassControl:
             self.continuous_rect_id = None
             self.continuous_parent_rect = None
 
-    # restore state of rectangle from before the last change
     def revert(self, rect: ui.Rect, rect_id: int) -> None:
+        """Restore state of rectangle from before the last change"""
         if self.last_rect and self.last_rect['id'] == rect_id:
             if testing:
                 print(f'revert: reverting size and/or position for {self.last_rect}')
@@ -1108,8 +1139,8 @@ class CompassControl:
             except CompassControl.RectUpdateError as e:
                 self._handle_rect_update_error(e)            
 
-    # move rectangle to center and size it according to the given direction and screen size percentage
     def snap(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, percent: int, direction: Direction) -> None:
+        """Move rectangle to center and size it according to the given direction and screen size percentage"""
         target_width = (parent_rect.width * (percent/100))
         target_height = (parent_rect.height * (percent/100))
 
@@ -1123,8 +1154,8 @@ class CompassControl:
 
         self.continuous_old_rect = old_rect
 
-    # return midpoint of the rectangle edge indicated by the given direction
     def get_edge_midpoint(self, rect_cc: ui.Rect, direction: Direction) -> Tuple[float, float]:
+        """Return midpoint of the rectangle edge indicated by the given direction"""
         
         x = y = None
 
@@ -1145,8 +1176,8 @@ class CompassControl:
 
         return x, y
 
-    # return coordinates of the rectangle corner indicated by the given direction
     def get_corner(self, rect_cc: ui.Rect, direction: Direction) -> Tuple[float, float]:
+        """Return coordinates of the rectangle corner indicated by the given direction"""
         x = y = None
 
         direction_count = sum(direction.values())
@@ -1166,12 +1197,12 @@ class CompassControl:
 
         return x, y
 
-    # return coordinates of the rectangle center
     def get_center(self, rect_cc: ui.Rect) -> Tuple[float, float]:
+        """Return coordinates of the rectangle center"""
         return rect_cc.center.x, rect_cc.center.y
 
-    # return coordinates of the rectangle point indicated by the given direction
     def get_target_point(self, rect_cc: ui.Rect, rect_id: int, parent_rect: ui.Rect, direction: Direction) -> Tuple[int, int]:
+        """Return coordinates of the rectangle point indicated by the given direction"""
         target_x = target_y = None
 
         direction_count = sum(direction.values())
@@ -1184,8 +1215,8 @@ class CompassControl:
 
         return round(target_x), round(target_y)
 
-    # after a change, save state of the regional rectangle so it can be restored later
     def save_last_rect(self, rect_id=None, rect=None):
+        """After a change, save state of the regional rectangle so it can be restored later"""
         # if testing:
         #     print(f'save_last_rect: {self}, {self.continuous_rect_id=}, {self.continuous_old_rect=}')
             
@@ -1199,8 +1230,8 @@ class CompassControl:
             'rect': rect
         }
 
-    # stop the current continuous move/resize operation
     def continuous_stop(self) -> None:
+        """Stop the current continuous move/resize operation"""
         with self.continuous_mutex:
             if not self.mover.continuous_job and not self.sizer.continuous_job:
                 if testing:
@@ -1233,9 +1264,11 @@ class CompassControl:
             stop_method()
 
     def get_diagonal_length(self, rect: ui.Rect) -> float:
+        """Get diagonal length of given rectangle"""
         return math.sqrt(((rect.width - rect.x) ** 2) + ((rect.height - rect.y) ** 2))
 
     def get_center_to_center_rect(self, rect: ui.Rect, rect_id: int, other_rect: ui.Rect) -> Tuple[ui.Rect, bool, bool]:
+        """Return rectangle whose diagonal is the line connecting the centers of the two given rectangles"""
         width = rect.width
         height = rect.y
 
@@ -1255,6 +1288,7 @@ class CompassControl:
         return center_to_center_rect, horizontal_multiplier, vertical_multiplier
 
     def get_component_dimensions(self, rect_cc: ui.Rect, rect_id: int, parent_rect: ui.Rect, distance: float, direction: Direction, operation: str) -> Tuple[int, int]:
+        """Return horizontal and vertical distances corresponding to the given distance along the diagonal of the given rectangle"""
         delta_width = delta_height = 0
         rect = rect_cc
         direction_count = sum(direction.values())
@@ -1307,6 +1341,7 @@ class CompassControl:
         return round(delta_width), round(delta_height)
 
     def get_component_dimensions_by_percent(self, rect_cc: ui.Rect, rect_id: int, parent_rect: ui.Rect, percent: float, direction: Direction, operation: str) -> Tuple[int, int]:
+        """Return horizontal and vertical distances corresponding to the given percentage of the diagonal of the given rectangle"""
         if testing:
             print(f'_get_component_dimensions_by_percent: {percent=}')
 
@@ -1327,6 +1362,7 @@ class CompassControl:
         return self.get_component_dimensions(rect_cc, rect_id, parent_rect, distance, direction, operation)
 
     def _get_continuous_parameters(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, rate_cps: float, dpi_x: float, dpi_y: float, direction: Direction, operation: str, frequency: float) -> Tuple[int, int]:
+        """Return horizontal and vertical increments to advance at each continuous iteration in order to match the given frequency, density and rate values"""
         if testing:
             print(f'get_continuous_parameters: {rate_cps=}')
 
@@ -1370,6 +1406,7 @@ class CompassControl:
         return round(width_increment), round(height_increment)
 
     def set_rect(self, old_rect: ui.Rect, rect_id: int, rect_in: ui.Rect) -> Tuple[bool, ui.Rect]:
+        """Invoke the given set method with updated rectangle values, so if old rectangle values for revert"""
         set_method = self.set_method
         result = set_method(old_rect, rect_id, rect_in)
         
