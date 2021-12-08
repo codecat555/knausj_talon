@@ -14,19 +14,6 @@
 # Continuous move/resize machinery adapted from mouse.py.
 # """
 
-# WIP - just fixed this problem (again), hopefully for good this time.
-# 2021-12-07 20:30:20 ERROR cron interval error <bound method CompassControl.Mover._continuous_helper of <user.knausj_talon.code.compass_control.CompassControl.Mover object at 0x000000006528AD30>>
-#     8:                              threading.py:930* # cron thread
-#     7:                              threading.py:973*
-#     6:                              threading.py:910*
-#     5:                             talon\cron.py:155|
-#     4:                             talon\cron.py:103|
-#     3:                   talon\scripting\rctx.py:233| # 'cron' user.knausj_talon.code.window_tweak:call()
-#     2:                             talon\cron.py:178| # [stack splice]
-#     1: user\knausj_talon\code\compass_control.py:246| center_x, center_y = next(self.continuous_bres)
-# TypeError: 'NoneType' object is not an iterator
-# 2021-12-07 20:30:23    IO 'win revert'
-
 # WIP - here are some quirks that need work:
 #
 # - continuous operations randomly stop, due to API timeouts. increasing wait time does not seem to help.
@@ -140,7 +127,7 @@ class CompassControl:
             # if self.testing:
             #     print(f'Mover.__init__: {rate=}')
 
-        def init_continuous(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, dpi_x: float, dpi_y: float, direction: Direction) -> None:
+        def continuous_init(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, dpi_x: float, dpi_y: float, direction: Direction) -> None:
             """Initialize continuous operation"""
             with self.compass_control.continuous_mutex:
                 if self.continuous_job:
@@ -179,9 +166,9 @@ class CompassControl:
                     # discard initial point (we're already there)
                     next(self.continuous_bres)
 
-                self._start_continuous()
+                self._continuous_start()
 
-        def _start_continuous(self) -> None:
+        def _continuous_start(self) -> None:
             """Commence continuous operation"""
             with self.compass_control.continuous_mutex:
                 ctx.tags = [self.compass_control.continuous_tag_name_qualified]
@@ -563,7 +550,7 @@ class CompassControl:
             self.use_resize_history_for_shrink: bool = False
             self.use_change_check_for_shrink: bool = not self.use_resize_history_for_shrink
 
-        def init_continuous(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, multiplier: int, dpi_x: float, dpi_y: float, direction: Optional[Direction] = None) -> None:
+        def continuous_init(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, multiplier: int, dpi_x: float, dpi_y: float, direction: Optional[Direction] = None) -> None:
             """Initialize continuous operation"""
             with self.compass_control.continuous_mutex:
                 if self.continuous_job:
@@ -591,9 +578,9 @@ class CompassControl:
                     print(f'init_continuous: starting resize - {self.continuous_width_increment=}, {self.continuous_height_increment=}, {self.compass_control.continuous_direction=}, {multiplier=}')
 
                 # let it roll
-                self._start_continuous()
+                self._continuous_start()
 
-        def _start_continuous(self) -> None:
+        def _continuous_start(self) -> None:
             """Commence continuous operation"""
             with self.compass_control.continuous_mutex:
                 # enable tag to enable the 'stop' command

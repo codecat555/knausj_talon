@@ -367,7 +367,7 @@ class Actions:
 
         w = ui.active_window()
 
-        compass_control.mover.init_continuous(w.rect, w.id, w.screen.visible_rect, w.screen.dpi_x, w.screen.dpi_y, direction)
+        compass_control.mover.continuous_init(w.rect, w.id, w.screen.visible_rect, w.screen.dpi_x, w.screen.dpi_y, direction)
 
         if settings.get('user.win_hide_move_gui') == 0:
             win_stop_gui.show()
@@ -386,7 +386,7 @@ class Actions:
             direction = compass_direction(['center'])
 
         w = ui.active_window()
-        compass_control.sizer.init_continuous(w.rect, w.id, w.screen.visible_rect, 1, w.screen.dpi_x, w.screen.dpi_y, direction)
+        compass_control.sizer.continuous_init(w.rect, w.id, w.screen.visible_rect, 1, w.screen.dpi_x, w.screen.dpi_y, direction)
 
         if settings.get('user.win_hide_resize_gui') == 0:
             win_stop_gui.show()
@@ -398,7 +398,7 @@ class Actions:
         if not direction:
             direction = compass_direction(['center'])
 
-        compass_control.sizer.init_continuous(w.rect, w.id, w.screen.visible_rect, -1, w.screen.dpi_x, w.screen.dpi_y, direction)
+        compass_control.sizer.continuous_init(w.rect, w.id, w.screen.visible_rect, -1, w.screen.dpi_x, w.screen.dpi_y, direction)
 
         if settings.get('user.win_hide_resize_gui') == 0:
             win_stop_gui.show()
