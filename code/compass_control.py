@@ -101,7 +101,7 @@ class CompassControl:
             if not size_matches_request:
                 logging.warning(f'after update, rectangle size does not exactly match request: {e.requested.width, e.requested.height} -> {e.actual.width, e.actual.height}')
 
-        self.save_last_rect(e.rect_id, e.initial)
+        self._save_last_rect(e.rect_id, e.initial)
 
     class Mover:
         def __init__(self, compass_control, frequency: str, rate: float, testing: bool):
@@ -1074,40 +1074,83 @@ class CompassControl:
 
     # CompassControl methods
 
-    # Bresenham line code, from
-    #       https://github.com/encukou/bresenham/blob/master/bresenham.py
-    def bresenham(self, x0: int, y0: int, x1: int, y1: int) -> Tuple[int, int]:
-        """Yield integer coordinates on the line from (x0, y0) to (x1, y1).
+    def _get_continuous_parameters(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, rate_cps: float, dpi_x: float, dpi_y: float, direction: Direction, operation: str, frequency: float) -> Tuple[int, int]:
+            """Return horizontal and vertical increments to advance at each continuous iteration in order to match the given frequency, density and rate values"""
+            if self.testing:
+                print(f'get_continuous_parameters: {rate_cps=}')
 
-        Input coordinates should be integers.
+            # convert rate from centimeters to inches, to match dpi units
+            rate_ips = rate_cps / 2.54
 
-        The result will contain both the start and the end point.
-        """
-        dx = x1 - x0
-        dy = y1 - y0
+            # calculate dots per millisecond
+            dpms_x = (rate_ips * dpi_x) / 1000
+            dpms_y = (rate_ips * dpi_y) / 1000
 
-        xsign = 1 if dx > 0 else -1
-        ysign = 1 if dy > 0 else -1
+            if self.testing:
+                print(f'get_continuous_parameters: {dpms_x=}, {dpms_y=}')
 
-        dx = abs(dx)
-        dy = abs(dy)
+            width_increment = height_increment = 0
 
-        if dx > dy:
-            xx, xy, yx, yy = xsign, 0, 0, ysign
-        else:
-            dx, dy = dy, dx
-            xx, xy, yx, yy = 0, ysign, xsign, 0
+            direction_count = sum(direction.values())
+            if direction_count == 1:
+                # single direction
+                if direction["left"] or direction["right"]:
+                    width_increment = dpms_x * frequency
+                elif direction["up"] or direction["down"]:
+                    height_increment = dpms_y * frequency
+            else:    # diagonal
+                width_increment = dpms_x * frequency
+                height_increment = dpms_y * frequency
 
-        D = 2*dy - dx
-        y = 0
+                if direction_count == 4 and operation == 'move':    # move to center
+                    if self.testing:
+                        print(f"get_continuous_parameters: 'move center' special case")
 
-        for x in range(dx + 1):
-            yield x0 + x*xx + y*yx, y0 + x*xy + y*yy
-            if D >= 0:
-                y += 1
-                D -= 2*dx
-            D += 2*dy
+                    # special case, return signed values
+                    if rect.center.x > parent_rect.center.x:
+                        width_increment *= -1
+                    #
+                    if rect.center.y > parent_rect.center.y:
+                        height_increment *= -1
 
+            if self.testing:
+                print(f"get_continuous_parameters: returning {width_increment=}, {height_increment=}")
+
+            return round(width_increment), round(height_increment)
+
+    def continuous_stop(self) -> None:
+            """Stop the current continuous move/resize operation"""
+            with self.continuous_mutex:
+                if not self.mover.continuous_job and not self.sizer.continuous_job:
+                    if self.testing:
+                        print('continuous_stop: no jobs to stop (may have stopped automatically via clipping logic)')
+                    return
+
+                if self.testing:
+                    print(f'continuous_stop: current thread = {threading.get_native_id()}')
+
+                if self.mover.continuous_job:
+                    cron.cancel(self.mover.continuous_job)
+
+                if self.sizer.continuous_job:
+                    cron.cancel(self.sizer.continuous_job)
+
+                # disable 'stop' command
+                ctx.tags = []
+
+                if self.continuous_old_rect:
+                    # remember starting rectangle
+                    if self.testing:
+                        print(f'continuous_stop: {self.continuous_old_rect=}')
+
+                    self._save_last_rect()
+                    self.continuous_old_rect = None
+
+                self._continuous_reset()
+
+                stop_method = self.continuous_stop_method
+                stop_method()
+                
     def _continuous_reset(self) -> None:
         """Reset variables used during continuous operations"""
         with self.continuous_mutex:
@@ -1120,6 +1163,34 @@ class CompassControl:
             self.continuous_rect = None
             self.continuous_rect_id = None
             self.continuous_parent_rect = None
+
+    def set_rect(self, old_rect: ui.Rect, rect_id: int, rect_in: ui.Rect) -> Tuple[bool, ui.Rect]:
+            """Invoke the given set method with updated rectangle values, so if old rectangle values for revert"""
+            set_method = self.set_method
+            result = set_method(old_rect, rect_id, rect_in)
+
+            # remember old rectangle, for 'revert'
+            self.last_rect = {
+                'id': rect_id,
+                'rect': old_rect
+            }
+
+            return result
+
+    def _save_last_rect(self, rect_id=None, rect=None):
+        """After a change, save state of the regional rectangle so it can be restored later"""
+        # if self.testing:
+        #     print(f'save_last_rect: {self}, {self.continuous_rect_id=}, {self.continuous_old_rect=}')
+
+        if not rect_id:
+            rect_id=self.continuous_rect_id
+        if not rect:
+            rect=self.continuous_old_rect
+
+        self.last_rect = {
+            'id': rect_id,
+            'rect': rect
+        }
 
     def revert(self, rect: ui.Rect, rect_id: int) -> Tuple[bool, ui.Rect]:
         """Restore state of rectangle from before the last change"""
@@ -1150,119 +1221,6 @@ class CompassControl:
         self.sizer.resize_absolute(rect, rect_id, target_width, target_height, direction)
 
         self.continuous_old_rect = old_rect
-
-    def get_edge_midpoint(self, rect: ui.Rect, direction: Direction) -> Tuple[float, float]:
-        """Return midpoint of the rectangle edge indicated by the given direction"""
-
-        x = y = None
-
-        direction_count = sum(direction.values())
-        if direction_count == 1:
-            if direction['left']: # west
-                x = rect.x
-                y = (rect.y + rect.height) // 2
-            elif direction['up']: # north
-                x = (rect.x + rect.width) // 2
-                y = rect.y
-            elif direction['right']: # east
-                x = rect.x + rect.width
-                y = (rect.y + rect.height) // 2
-            elif direction['down']: # south
-                x = (rect.x + rect.width) // 2
-                y = rect.y + rect.height
-
-        return round(x), round(y)
-
-    def get_corner(self, rect: ui.Rect, direction: Direction) -> Tuple[float, float]:
-        """Return coordinates of the rectangle corner indicated by the given direction"""
-        x = y = None
-
-        direction_count = sum(direction.values())
-        if direction_count == 2:
-            if direction['left'] and direction['up']: # northwest
-                x = rect.x
-                y = rect.y
-            elif direction['right'] and direction['up']: # northeast
-                x = rect.x + rect.width
-                y = rect.y
-            elif direction['right'] and direction['down']: # southeast
-                x = rect.x + rect.width
-                y = rect.y + rect.height
-            elif direction['left'] and direction['down']: # southwest
-                x = rect.x
-                y = rect.y + rect.height
-
-        return round(x), round(y)
-
-    def get_center(self, rect: ui.Rect) -> Tuple[float, float]:
-        """Return coordinates of the rectangle center"""
-        return round(rect.center.x), round(rect.center.y)
-
-    def get_target_point(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, direction: Direction) -> Tuple[int, int]:
-        """Return coordinates of the rectangle point indicated by the given direction"""
-        target_x = target_y = None
-
-        direction_count = sum(direction.values())
-        if direction_count == 1:    # horizontal or vertical
-            target_x, target_y = self.get_edge_midpoint(parent_rect, direction)
-        elif direction_count == 2:    # diagonal
-            target_x, target_y = self.get_corner(parent_rect, direction)
-        elif direction_count == 4:    # center
-            target_x, target_y = self.get_center(parent_rect)
-
-        return target_x, target_y
-
-    def save_last_rect(self, rect_id=None, rect=None):
-        """After a change, save state of the regional rectangle so it can be restored later"""
-        # if self.testing:
-        #     print(f'save_last_rect: {self}, {self.continuous_rect_id=}, {self.continuous_old_rect=}')
-
-        if not rect_id:
-            rect_id=self.continuous_rect_id
-        if not rect:
-            rect=self.continuous_old_rect
-
-        self.last_rect = {
-            'id': rect_id,
-            'rect': rect
-        }
-
-    def continuous_stop(self) -> None:
-        """Stop the current continuous move/resize operation"""
-        with self.continuous_mutex:
-            if not self.mover.continuous_job and not self.sizer.continuous_job:
-                if self.testing:
-                    print('continuous_stop: no jobs to stop (may have stopped automatically via clipping logic)')
-                return
-
-            if self.testing:
-                print(f'continuous_stop: current thread = {threading.get_native_id()}')
-
-            if self.mover.continuous_job:
-                cron.cancel(self.mover.continuous_job)
-
-            if self.sizer.continuous_job:
-                cron.cancel(self.sizer.continuous_job)
-
-            # disable 'stop' command
-            ctx.tags = []
-
-            if self.continuous_old_rect:
-                # remember starting rectangle
-                if self.testing:
-                    print(f'continuous_stop: {self.continuous_old_rect=}')
-
-                self.save_last_rect()
-                self.continuous_old_rect = None
-
-            self._continuous_reset()
-
-            stop_method = self.continuous_stop_method
-            stop_method()
-
-    def get_diagonal_length(self, rect: ui.Rect) -> float:
-        """Get diagonal length of given rectangle"""
-        return math.sqrt(((rect.width - rect.x) ** 2) + ((rect.height - rect.y) ** 2))
 
     def get_center_to_center_rect(self, rect: ui.Rect, rect_id: int, other_rect: ui.Rect) -> Tuple[ui.Rect, bool, bool]:
         """Return rectangle whose diagonal is the line connecting the centers of the two given rectangles"""
@@ -1356,62 +1314,104 @@ class CompassControl:
 
         return self.get_component_dimensions(rect, rect_id, parent_rect, distance, direction, operation)
 
-    def _get_continuous_parameters(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, rate_cps: float, dpi_x: float, dpi_y: float, direction: Direction, operation: str, frequency: float) -> Tuple[int, int]:
-        """Return horizontal and vertical increments to advance at each continuous iteration in order to match the given frequency, density and rate values"""
-        if self.testing:
-            print(f'get_continuous_parameters: {rate_cps=}')
+    # Bresenham line code, from
+    #       https://github.com/encukou/bresenham/blob/master/bresenham.py
+    def bresenham(self, x0: int, y0: int, x1: int, y1: int) -> Tuple[int, int]:
+        """Yield integer coordinates on the line from (x0, y0) to (x1, y1).
 
-        # convert rate from centimeters to inches, to match dpi units
-        rate_ips = rate_cps / 2.54
+        Input coordinates should be integers.
 
-        # calculate dots per millisecond
-        dpms_x = (rate_ips * dpi_x) / 1000
-        dpms_y = (rate_ips * dpi_y) / 1000
+        The result will contain both the start and the end point.
+        """
+        dx = x1 - x0
+        dy = y1 - y0
 
-        if self.testing:
-            print(f'get_continuous_parameters: {dpms_x=}, {dpms_y=}')
+        xsign = 1 if dx > 0 else -1
+        ysign = 1 if dy > 0 else -1
 
-        width_increment = height_increment = 0
+        dx = abs(dx)
+        dy = abs(dy)
+
+        if dx > dy:
+            xx, xy, yx, yy = xsign, 0, 0, ysign
+        else:
+            dx, dy = dy, dx
+            xx, xy, yx, yy = 0, ysign, xsign, 0
+
+        D = 2*dy - dx
+        y = 0
+
+        for x in range(dx + 1):
+            yield x0 + x*xx + y*yx, y0 + x*xy + y*yy
+            if D >= 0:
+                y += 1
+                D -= 2*dx
+            D += 2*dy
+
+    def get_edge_midpoint(self, rect: ui.Rect, direction: Direction) -> Tuple[float, float]:
+        """Return midpoint of the rectangle edge indicated by the given direction"""
+
+        x = y = None
 
         direction_count = sum(direction.values())
         if direction_count == 1:
-            # single direction
-            if direction["left"] or direction["right"]:
-                width_increment = dpms_x * frequency
-            elif direction["up"] or direction["down"]:
-                height_increment = dpms_y * frequency
-        else:    # diagonal
-            width_increment = dpms_x * frequency
-            height_increment = dpms_y * frequency
+            if direction['left']: # west
+                x = rect.x
+                y = (rect.y + rect.height) // 2
+            elif direction['up']: # north
+                x = (rect.x + rect.width) // 2
+                y = rect.y
+            elif direction['right']: # east
+                x = rect.x + rect.width
+                y = (rect.y + rect.height) // 2
+            elif direction['down']: # south
+                x = (rect.x + rect.width) // 2
+                y = rect.y + rect.height
 
-            if direction_count == 4 and operation == 'move':    # move to center
-                if self.testing:
-                    print(f"get_continuous_parameters: 'move center' special case")
+        return round(x), round(y)
 
-                # special case, return signed values
-                if rect.center.x > parent_rect.center.x:
-                    width_increment *= -1
-                #
-                if rect.center.y > parent_rect.center.y:
-                    height_increment *= -1
+    def get_corner(self, rect: ui.Rect, direction: Direction) -> Tuple[float, float]:
+        """Return coordinates of the rectangle corner indicated by the given direction"""
+        x = y = None
 
-        if self.testing:
-            print(f"get_continuous_parameters: returning {width_increment=}, {height_increment=}")
+        direction_count = sum(direction.values())
+        if direction_count == 2:
+            if direction['left'] and direction['up']: # northwest
+                x = rect.x
+                y = rect.y
+            elif direction['right'] and direction['up']: # northeast
+                x = rect.x + rect.width
+                y = rect.y
+            elif direction['right'] and direction['down']: # southeast
+                x = rect.x + rect.width
+                y = rect.y + rect.height
+            elif direction['left'] and direction['down']: # southwest
+                x = rect.x
+                y = rect.y + rect.height
 
-        return round(width_increment), round(height_increment)
+        return round(x), round(y)
 
-    def set_rect(self, old_rect: ui.Rect, rect_id: int, rect_in: ui.Rect) -> Tuple[bool, ui.Rect]:
-        """Invoke the given set method with updated rectangle values, so if old rectangle values for revert"""
-        set_method = self.set_method
-        result = set_method(old_rect, rect_id, rect_in)
+    def get_center(self, rect: ui.Rect) -> Tuple[float, float]:
+        """Return coordinates of the rectangle center"""
+        return round(rect.center.x), round(rect.center.y)
 
-        # remember old rectangle, for 'revert'
-        self.last_rect = {
-            'id': rect_id,
-            'rect': old_rect
-        }
+    def get_target_point(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, direction: Direction) -> Tuple[int, int]:
+        """Return coordinates of the rectangle point indicated by the given direction"""
+        target_x = target_y = None
 
-        return result
+        direction_count = sum(direction.values())
+        if direction_count == 1:    # horizontal or vertical
+            target_x, target_y = self.get_edge_midpoint(parent_rect, direction)
+        elif direction_count == 2:    # diagonal
+            target_x, target_y = self.get_corner(parent_rect, direction)
+        elif direction_count == 4:    # center
+            target_x, target_y = self.get_center(parent_rect)
+
+        return target_x, target_y
+
+    def get_diagonal_length(self, rect: ui.Rect) -> float:
+        """Get diagonal length of given rectangle"""
+        return math.sqrt(((rect.width - rect.x) ** 2) + ((rect.height - rect.y) ** 2))
 
 ## talon stuff
 
