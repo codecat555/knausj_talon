@@ -5,6 +5,9 @@ win show$:
 win hide$:
     user.win_hide()
 
+win move$:
+    user.win_move()
+
 win move <user.compass_direction>$:
     user.win_move(compass_direction)
 

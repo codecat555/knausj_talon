@@ -359,6 +359,12 @@ class Actions:
 
     def win_move(direction: Optional[Direction] = None) -> None:
         "Move window in small increments in the given direction, until stopped"
+
+        if not direction:
+            direction = compass_direction(['center'])
+
+        print(f'win_move: {direction=}')
+
         w = ui.active_window()
 
         compass_control.mover.init_continuous(w.rect, w.id, w.screen.visible_rect, w.screen.dpi_x, w.screen.dpi_y, direction)
