@@ -140,9 +140,6 @@ class CompassControl:
             # if self.testing:
             #     print(f'Mover.__init__: {rate=}')
 
-    # WIP - instrumentation to catch an elusive error
-            self.traceback = None
-
         def init_continuous(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, dpi_x: float, dpi_y: float, direction: Direction) -> None:
             """Initialize continuous operation"""
             with self.compass_control.continuous_mutex:
@@ -262,12 +259,7 @@ class CompassControl:
                             try:
                                 # skip until we see some movement
                                 while (x, y) == (round(rect.x), round(rect.y)):
-                    # WIP - instrumentation to catch an elusive error
-                                    try:
-                                        center_x, center_y = next(self.continuous_bres)
-                                    except TypeError:
-                                        print(''.join(self.traceback))
-                                        self.traceback = None
+                                    center_x, center_y = next(self.continuous_bres)
                                         
                                     # translate center coordinates to top left
                                     x, y = self.translate_top_left_by_region(rect, rect_id, center_x, center_y, self.compass_control.continuous_direction)
@@ -341,12 +333,6 @@ class CompassControl:
                 self.continuous_job = None
                 self.continuous_bres = None
                 
-        # WIP - instrumentation to catch an elusive error
-                # print('********************')
-                import traceback
-                self.traceback = traceback.format_stack()
-                # print('********************')
-
         def move_pixels_relative(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, delta_x: float, delta_y: float, direction: Direction) -> Tuple[ui.Rect, bool, bool]:
             """Move rectangle in given direction as indicated by the given delta values"""
             start_time = time.time_ns()
