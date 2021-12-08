@@ -23,7 +23,7 @@ from talon.debug import log_exception
 from .compass_control import CompassControl, Direction, compass_direction
 
 # # turn debug messages on and off
-testing: bool = False
+testing: bool = True
 
 win_compass_control = None
 compass_control = None
@@ -262,8 +262,8 @@ def on_ready():
 
 app.register("ready", on_ready)
 
-# @imgui.open(y=0)
-@imgui.open(x=4000,y=244)
+@imgui.open(x=2100, y=40)
+# @imgui.open(x=4000,y=244)
 def _win_show_gui(gui: imgui.GUI) -> None:
     w = ui.active_window()
 
@@ -405,12 +405,19 @@ class Actions:
 
     def win_resize_absolute(target_width: float, target_height: float, region: Optional[Direction] = None) -> None:
         "Size window to given absolute dimensions, optionally by stretching/shrinking in the direction indicated by the given region"
+        
+        if not region:
+            region = compass_direction(['center'])
+            
         w = ui.active_window()
 
         compass_control.sizer.resize_absolute(w.rect, w.id, target_width, target_height, region)
 
-    def win_move_pixels(distance: int, direction: Direction) -> None:
+    def win_move_pixels(distance: int, direction: Optional[Direction] = None) -> None:
         "Move window some number of pixels"
+
+        if not direction:
+            direction = compass_direction(['center'])
 
         w = ui.active_window()
 
@@ -418,8 +425,11 @@ class Actions:
 
         return compass_control.mover.move_pixels_relative(w.rect, w.id, w.screen.visible_rect, delta_width, delta_height, direction)
 
-    def win_move_percent(percent: float, direction: Direction) -> None:
+    def win_move_percent(percent: float, direction: Optional[Direction] = None) -> None:
         "Move window some percentage of the current size"
+
+        if not direction:
+            direction = compass_direction(['center'])
 
         w = ui.active_window()
 
@@ -427,9 +437,12 @@ class Actions:
 
         return compass_control.mover.move_pixels_relative(w.rect, w.id, w.screen.visible_rect, delta_width, delta_height, direction)
 
-    def win_resize_pixels(distance: int, direction: Direction) -> None:
+    def win_resize_pixels(distance: int, direction: Optional[Direction] = None) -> None:
         "Change window size by pixels"
         w = ui.active_window()
+
+        if not direction:
+            direction = compass_direction(['center'])
 
         delta_width, delta_height = compass_control.get_component_dimensions(w.rect, w.id, w.screen.visible_rect, distance, direction, 'resize')
 
@@ -438,8 +451,11 @@ class Actions:
 
         compass_control.sizer.resize_pixels_relative(w.rect, w.id, w.screen.visible_rect, delta_width, delta_height, direction)
 
-    def win_resize_percent(percent: float, direction: Direction) -> None:
+    def win_resize_percent(percent: float, direction: Optional[Direction] = None) -> None:
         "Change window size by a percentage of current size"
+
+        if not direction:
+            direction = compass_direction(['center'])
 
         w = ui.active_window()
 
