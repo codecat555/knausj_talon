@@ -14,6 +14,11 @@
 # Continuous move/resize machinery adapted from mouse.py.
 # """
 
+# WIP - check diagonal distance in pixels is accurate
+
+# TODO
+# Implement antipodal direction - just need to swap sign on the increments for 'win move center'...I think. Need a better term, too many syllables. anticenter? outer? away? far?!
+
 # WIP - here are some quirks that need work:
 #
 # - continuous operations randomly stop, due to API timeouts. increasing wait time does not seem to help.
@@ -37,7 +42,7 @@ import logging
 import threading
 import time
 
-from talon import ui, Module, ctrl, cron, Context
+from talon import ui, Module, ctrl, cron, Context, settings
 from talon.types.point import Point2d
 
 # a type for representing compass directions
@@ -45,15 +50,13 @@ Direction = Dict[str, bool]
 
 class CompassControl:
 
-    def __init__(self, continuous_tag_name: str, set_method: Callable, stop_method: Callable, move_frequency: str, resize_frequency: str, move_rate: float, resize_rate: float, verbose_warnings: int, testing: bool):
+    def __init__(self, continuous_tag_name: str, set_method: Callable, stop_method: Callable, settings_map: Dict, testing: bool):
 
         # turn debug messages on and off
         self.testing = testing
 
         # the method to call to actually set the new size and position of the given rectangle
         self.set_method = set_method
-
-        self.verbose_warnings: int = verbose_warnings
 
         # remember the last rectangle so we can always revert back to it later
         self.last_rect: Dict = dict()
@@ -75,11 +78,69 @@ class CompassControl:
         self.continuous_rect_id: int = None
         self.continuous_parent_rect: ui.Rect = None
 
-        # print(f'CompassControl.__init__: {move_rate=}')
+        # talon settings
+        self._verbose_warnings: int = None
 
         # the control uses a mover instance and a sizer instance
-        self.mover: CompassControl.Mover = CompassControl.Mover(self, move_frequency, move_rate, testing)
-        self.sizer: CompassControl.Sizer = CompassControl.Sizer(self, resize_frequency, resize_rate, testing)
+        self.mover: CompassControl.Mover = CompassControl.Mover(self, settings_map, testing)
+        self.sizer: CompassControl.Sizer = CompassControl.Sizer(self, settings_map, testing)
+
+        self.settings_map = settings_map
+        self.refresh_map =  { talon_setting.path: local_name for local_name, talon_setting in settings_map.items() if hasattr(self, local_name)}
+        self.refresh_settings()
+        # catch updates
+        settings.register("", self.refresh_settings)
+
+        # print(f'CompassControl.__init__: {move_rate=}')
+
+    @property
+    def verbose_warnings(self):
+        if self._verbose_warnings is None:
+            self._verbose_warnings = self.settings_map['_verbose_warnings'].get()
+        return self._verbose_warnings
+    
+    def refresh_settings(self, *args):
+        # if self.testing:
+        #     # print(f'refresh_settings: {self.settings_map=}')
+        #     print(f'CompassControl.refresh_settings: args: {args=}')
+
+        # WIP - should chase down this...bug?
+        # 2021-12-08 22:59:37    IO CompassControl.refresh_settings: arg='user.code_public_function_formatter'
+        # 2021-12-08 22:59:37    IO CompassControl.refresh_settings: arg=<talon.scripting.types.SettingDecl.NoValueType object at 0x0000000005B7C160>
+        # 2021-12-08 22:59:37    IO CompassControl.Mover.refresh_settings: args=('user.code_public_function_formatter', <talon.scripting.types.SettingDecl.NoValueType object at 0x0000000005B7C160>)
+        # 2021-12-08 22:59:37    IO refresh_settings: self.settings_map={'continuous_move_frequency_str': 'user.win_move_frequency', 'continuous_resize_frequency_str': 'user.win_resize_frequency', 'continuous_move_rate': 'user.win_continuous_move_rate', 'continuous_resize_rate': 'user.win_continuous_resize_rate', 'verbose_warnings': 'user.win_verbose_warnings'}
+        # 2021-12-08 22:59:37    IO refresh_settings: args: args=('user.code_public_variable_formatter', <talon.scripting.types.SettingDecl.NoValueType object at 0x0000000005B7C160>)
+        # 2021-12-08 22:59:37    IO CompassControl.refresh_settings: arg='user.code_public_variable_formatter'
+        # 2021-12-08 22:59:37    IO CompassControl.refresh_settings: arg=<talon.scripting.types.SettingDecl.NoValueType object at 0x0000000005B7C160>
+        # 2021-12-08 22:59:37    IO CompassControl.Mover.refresh_settings: args=('user.code_public_variable_formatter', <talon.scripting.types.SettingDecl.NoValueType object at 0x0000000005B7C160>)
+        # 2021-12-08 22:59:37    IO CompassControl.Sizer.refresh_settings: args=('user.code_public_variable_formatter', <talon.scripting.types.SettingDecl.NoValueType object at 0x0000000005B7C160>)
+        # 2021-12-08 22:59:37    IO refresh_settings: self.settings_map={'continuous_move_frequency_str': 'user.win_move_frequency', 'continuous_resize_frequency_str': 'user.win_resize_frequency', 'continuous_move_rate': 'user.win_continuous_move_rate', 'continuous_resize_rate': 'user.win_continuous_resize_rate', 'verbose_warnings': 'user.win_verbose_warnings'}
+        # 2021-12-08 22:59:37    IO refresh_settings: args: args=('user.code_protected_function_formatter', <talon.scripting.types.SettingDecl.NoValueType object at 0x0000000005B7C160>)
+
+        if args:
+            # fetch updated settings
+            talon_name = args[0]
+            try:
+                local_name = self.refresh_map[talon_name]
+            except KeyError:
+                # not one of our settings
+                pass
+            else:
+                self.__setattr__(local_name, args[1])
+
+                if self.testing:
+                    print(f'CompassControl.refresh_settings: received updated value for {talon_name}: {getattr(self, local_name, None)}')
+        else:
+            # fetch all our settings
+            for local_name, talon_setting in self.settings_map.items():
+                if hasattr(self, local_name):
+                    self.__setattr__(local_name, talon_setting.get())
+
+                    if self.testing:
+                        print(f'CompassControl.refresh_settings: received updated value for {talon_setting.path}: {getattr(self, local_name, None)}')
+
+        self.mover.refresh_settings(args)
+        self.sizer.refresh_settings(args)
 
     # error thrown when a mover resize request is not completely successful
     class RectUpdateError(Exception):
@@ -104,17 +165,12 @@ class CompassControl:
         self._save_last_rect(e.rect_id, e.initial)
 
     class Mover:
-        def __init__(self, compass_control, frequency: str, rate: float, testing: bool):
+        def __init__(self, compass_control, settings_map: Dict, testing: bool):
             # ref to parent
             self.compass_control: CompassControl = compass_control
 
             # turn debug messages on and off
             self.testing = testing
-
-            # settings for managing continuous move/resize operations
-            self.continuous_frequency_str: str = frequency
-            self.continuous_frequency: float = float((frequency)[:-2])
-            self.continuous_rate: float = rate
 
             # variables used during continuous move/resize operations
             self.continuous_width_increment: int = 0
@@ -124,9 +180,71 @@ class CompassControl:
             # bresenham generator used for 'move to center' operations
             self.continuous_bres: Iterator[(int, int)] = None
 
+            # talon settings
+            self._verbose_warnings: int = None
+            self._continuous_move_frequency_str: str = ""
+            self._continuous_move_frequency: float = 0
+            self._continuous_move_rate: float = 0
+
+            self.settings_map = settings_map
+            self.refresh_map =  { talon_setting.path: local_name for local_name, talon_setting in settings_map.items() if hasattr(self, local_name) }
+
             # if self.testing:
             #     print(f'Mover.__init__: {rate=}')
 
+        @property
+        def verbose_warnings(self):
+            if self._verbose_warnings is None:
+                self._verbose_warnings = self.settings_map['_verbose_warnings'].get()
+            return self._verbose_warnings
+
+        @property
+        def continuous_move_frequency_str(self):
+            if self._continuous_move_frequency_str is None:
+                self._continuous_move_frequency_str = self.settings_map['_continuous_move_frequency_str'].get()
+            return self._continuous_move_frequency_str
+        
+        @property
+        def continuous_move_frequency(self):
+            if self._continuous_move_frequency is None:
+                self._continuous_move_frequency = float((self.continuous_move_frequency_str)[:-2])
+            return self._continuous_move_frequency
+        
+        @property
+        def continuous_move_rate(self):
+            if not self._continuous_move_rate is None:
+                self._continuous_move_rate = self.settings_map['_continuous_move_rate'].get()
+            return self._continuous_move_rate
+        
+
+        # settings for managing continuous move/resize operations
+        def refresh_settings(self, args):
+            # if self.testing:
+            #     print(f'CompassControl.Mover.refresh_settings: {self.settings_map=}')          
+                
+            if args:
+                talon_name = args[0]
+                try:
+                    local_name = self.refresh_map[talon_name]
+                except KeyError:
+                    # not one of our settings
+                    pass
+                else:
+                    self.__setattr__(local_name, args[1])
+
+                    if self.testing:
+                        print(f'CompassControl.Mover.refresh_settings: received updated value for {talon_name}: {getattr(self, local_name, None)}')
+            else:
+                for local_name, talon_setting in self.settings_map.items():
+                    if hasattr(self, local_name):
+                        self.__setattr__(local_name, talon_setting.get())
+
+                        if self.testing:
+                            print(f'CompassControl.Mover.refresh_settings: received updated value for {talon_setting.path}: {getattr(self, local_name, None)}')
+
+            # force a refresh for this value
+            self._continuous_move_frequency = None
+            
         def continuous_init(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, dpi_x: float, dpi_y: float, direction: Direction) -> None:
             """Initialize continuous operation"""
             with self.compass_control.continuous_mutex:
@@ -146,7 +264,7 @@ class CompassControl:
 
                 # print(f'init_continuous: {self.continuous_frequency_str=}')
                 self.continuous_width_increment, self.continuous_height_increment = self.compass_control._get_continuous_parameters(
-                                    rect, rect_id, parent_rect, self.continuous_rate, dpi_x, dpi_y, direction, 'move', self.continuous_frequency)
+                                    rect, rect_id, parent_rect, self.continuous_move_rate, dpi_x, dpi_y, direction, 'move', self.continuous_move_frequency)
 
                 if self.testing:
                     print(f'init_continuous: {self.continuous_width_increment=}, {self.continuous_height_increment=}')
@@ -172,7 +290,7 @@ class CompassControl:
             """Commence continuous operation"""
             with self.compass_control.continuous_mutex:
                 ctx.tags = [self.compass_control.continuous_tag_name_qualified]
-                self.continuous_job = cron.interval(self.continuous_frequency_str, self._continuous_helper)
+                self.continuous_job = cron.interval(self.continuous_move_frequency_str, self._continuous_helper)
                 if self.testing:
                     print(f'_start_continuous: {self.continuous_job=}')
 
@@ -306,7 +424,7 @@ class CompassControl:
                 elapsed_time_ms = (time.time_ns() - start_time) / 1e6
                 if self.testing:
                     print(f'continuous_helper: iteration {iteration} done ({elapsed_time_ms} ms)')
-                if elapsed_time_ms > self.continuous_frequency:
+                if elapsed_time_ms > self.continuous_move_frequency:
                     if self.compass_control.verbose_warnings != 0:
                         logging.warning(f'continuous_helper: move iteration {iteration} took {elapsed_time_ms}ms, longer than the current move_frequency setting. actual rate may not match the continuous_rate setting.')
 
@@ -525,16 +643,11 @@ class CompassControl:
                 print(f'test_bresenham_1: bresenham done')
 
     class Sizer:
-        def __init__(self, compass_control, frequency: str, rate: str, testing: bool):
+        def __init__(self, compass_control, settings_map: Dict, testing: bool):
             self.compass_control: CompassControl = compass_control
 
             # turn debug messages on and off
-            self.testing = testing
-
-            # settings for managing continuous move/resize operations
-            self.continuous_frequency_str: str = frequency
-            self.continuous_frequency: float = float((frequency)[:-2])
-            self.continuous_rate: float = rate
+            self.testing: bool = testing
 
             # variables used during continuous move/resize operations
             self.continuous_width_increment: int = 0
@@ -550,6 +663,63 @@ class CompassControl:
             self.use_resize_history_for_shrink: bool = False
             self.use_change_check_for_shrink: bool = not self.use_resize_history_for_shrink
 
+            # talon settings for managing continuous move/resize operations
+            self._verbose_warnings: int = None
+            self._continuous_resize_frequency_str: str = None
+            self._continuous_resize_frequency: float = None
+            self._continuous_resize_rate: float = None
+
+            self.settings_map: Dict = settings_map
+            self.refresh_map =  { talon_setting.path: local_name for local_name, talon_setting in settings_map.items() if hasattr(self, local_name) }
+
+        @property
+        def verbose_warnings(self):
+            if self._verbose_warnings is None:
+                self._verbose_warnings = self.settings_map['_verbose_warnings'].get()
+            return self._verbose_warnings
+
+        @property
+        def continuous_resize_frequency_str(self):
+            if self._continuous_resize_frequency_str is None:
+                self._continuous_resize_frequency_str = self.settings_map['_continuous_resize_frequency_str'].get()
+            return self._continuous_resize_frequency_str
+        
+        @property
+        def continuous_resize_frequency(self):
+            if self._continuous_resize_frequency is None:
+                self._continuous_resize_frequency = float((self.continuous_resize_frequency_str)[:-2])
+            return self._continuous_resize_frequency
+        
+        @property
+        def continuous_resize_rate(self):
+            if not self._continuous_resize_rate is None:
+                self._continuous_resize_rate = self.settings_map['_continuous_resize_rate'].get()
+            return self._continuous_resize_rate
+
+        def refresh_settings(self, args):
+            if args:
+                talon_name = args[0]
+                try:
+                    local_name = self.refresh_map[talon_name]
+                except KeyError:
+                    # not one of our settings
+                    pass
+                else:
+                    self.__setattr__(local_name, args[1])
+
+                    if self.testing:
+                        print(f'CompassControl.Sizer.refresh_settings: received updated value for {talon_name}: {getattr(self, local_name, None)}')
+            else:
+                for local_name, talon_setting in self.settings_map.items():
+                    if hasattr(self, local_name):
+                        self.__setattr__(local_name, talon_setting.get())
+
+                        if self.testing:
+                            print(f'CompassControl.Sizer.refresh_settings: received updated value for {talon_setting.path}: {getattr(self, local_name, None)}')
+
+            # force a refresh for this value
+            self._continuous_resize_frequency = None
+
         def continuous_init(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, multiplier: int, dpi_x: float, dpi_y: float, direction: Optional[Direction] = None) -> None:
             """Initialize continuous operation"""
             with self.compass_control.continuous_mutex:
@@ -561,7 +731,7 @@ class CompassControl:
 
                 # get vertical and horizontal step sizes, to match the rate and frequency settings
                 self.continuous_width_increment, self.continuous_height_increment = self.compass_control._get_continuous_parameters(
-                                    rect, rect_id, parent_rect, self.continuous_rate, dpi_x, dpi_y, direction, '_resize', self.continuous_frequency)
+                                    rect, rect_id, parent_rect, self.continuous_resize_rate, dpi_x, dpi_y, direction, '_resize', self.continuous_resize_frequency)
 
                 # apply multiplier to control whether we're stretching or shrinking
                 self.continuous_width_increment *= multiplier
@@ -587,7 +757,7 @@ class CompassControl:
                 ctx.tags = [self.compass_control.continuous_tag_name_qualified]
 
                 # start the job
-                self.continuous_job = cron.interval(self.continuous_frequency_str, self._continuous_helper)
+                self.continuous_job = cron.interval(self.continuous_resize_frequency_str, self._continuous_helper)
 
                 if self.testing:
                     print(f'_start_continuous: {self.continuous_job=}')
@@ -685,7 +855,7 @@ class CompassControl:
             elapsed_time_ms = (time.time_ns() - start_time) / 1e6
             if self.testing:
                 print(f'continuous_helper: iteration {iteration} done ({elapsed_time_ms} ms)')
-            if elapsed_time_ms > self.continuous_frequency:
+            if elapsed_time_ms > self.continuous_resize_frequency:
                 if self.compass_control.verbose_warnings != 0:
                     logging.warning(f'continuous_helper: resize iteration {iteration} took {elapsed_time_ms}ms, longer than the current resize_frequency setting. actual rate may not match the current rate setting.')
 

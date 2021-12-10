@@ -8,6 +8,8 @@
 # talon resize() API behavior, which will not increase height beyond 1625 for some reason...perhaps related to
 # the height of the largest of my 3 screens (which is height 1600).
 #
+# WIP - here's a weird one: I have vscode maximized on my left hand screen and say 'win size one thousand by one thousand',
+# WIP - first it resizes and then jumps to my primary Screen to the right.
 
 from typing import Optional, Dict, Tuple
 
@@ -161,25 +163,25 @@ tag = mod.tag(TAG_NAME, desc="Enable stop command during continuous window move/
 # context used to enable/disable window_tweak_running tag
 ctx = Context()
 
-mod.setting(
+setting_move_frequency = mod.setting(
     "win_move_frequency",
     type=str,
     default="40ms",
     desc="The update frequency used when moving a window continuously",
 )
-mod.setting(
+setting_resize_frequency = mod.setting(
     "win_resize_frequency",
     type=str,
     default="40ms",
     desc="The update frequency used when resizing a window continuously",
 )
-mod.setting(
+setting_move_rate = mod.setting(
     "win_continuous_move_rate",
     type=float,
     default=4.5,
     desc="The target speed, in cm/sec, for continuous move operations",
 )
-mod.setting(
+setting_resize_rate = mod.setting(
     "win_continuous_resize_rate",
     type=float,
     default=4.0,
@@ -209,7 +211,7 @@ mod.setting(
     default=1,
     desc="How many times to retry a timed out talon window move/resize request.",
 )
-mod.setting(
+setting_verbose_warnings = mod.setting(
     "win_verbose_warnings",
     type=bool,
     default=False,
@@ -233,15 +235,18 @@ def on_ready():
 
     win_compass_control= WinCompassControl(TAG_NAME)
 
+    compass_control_settings = {
+        '_continuous_move_frequency_str':   setting_move_frequency,
+        '_continuous_resize_frequency_str': setting_resize_frequency,
+        '_continuous_move_rate':            setting_move_rate,
+        '_continuous_resize_rate':          setting_resize_rate,
+        '_verbose_warnings':                setting_verbose_warnings
+    }
     compass_control= CompassControl(
         win_compass_control.continuous_tag_name,
         win_compass_control.win_set_rect,
         win_compass_control.win_stop,
-        settings.get('user.win_move_frequency'),
-        settings.get('user.win_resize_frequency'),
-        settings.get('user.win_continuous_move_rate'),
-        settings.get('user.win_continuous_resize_rate'),
-        settings.get('user.win_verbose_warnings'),
+        compass_control_settings,
         testing
     )
 
