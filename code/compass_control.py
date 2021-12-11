@@ -86,7 +86,10 @@ class CompassControl:
         self.sizer: CompassControl.Sizer = CompassControl.Sizer(self, settings_map, testing)
 
         self.settings_map = settings_map
-        self.refresh_map =  { talon_setting.path: local_name for local_name, talon_setting in settings_map.items() if hasattr(self, local_name)}
+        self.refresh_map =  {
+                talon_setting.path: local_name
+                            for local_name, talon_setting in settings_map.items()
+                                                                if hasattr(self, local_name) }
         self.refresh_settings()
         # catch updates
         settings.register("", self.refresh_settings)
@@ -143,7 +146,7 @@ class CompassControl:
         try:
             local_name = caller.refresh_map[talon_name]
         except KeyError:
-                # not one of our settings
+            # not one of our settings
             pass
         else:
             caller.__setattr__(local_name, args[1])
@@ -151,7 +154,7 @@ class CompassControl:
             if caller.testing:
                 print(f'{caller_id}._update_setting: received updated value for {talon_name}: {getattr(caller, local_name, None)}')
 
-    # error thrown when a mover resize request is not completely successful
+    # error thrown when a move or resize request is not completely successful
     class RectUpdateError(Exception):
         def __init__(self, rect_id, initial,  requested, actual):
             # along with error reporting, these values are used to update last_rect in support of revert functionality
@@ -196,7 +199,10 @@ class CompassControl:
             self._continuous_move_rate: float = 0
 
             self.settings_map = settings_map
-            self.refresh_map =  { talon_setting.path: local_name for local_name, talon_setting in settings_map.items() if hasattr(self, local_name) }
+            self.refresh_map =  {
+                talon_setting.path: local_name
+                            for local_name, talon_setting in settings_map.items()
+                                                                if hasattr(self, local_name) }
 
             # if self.testing:
             #     print(f'Mover.__init__: {rate=}')
@@ -225,9 +231,7 @@ class CompassControl:
                 self._continuous_move_rate = self.settings_map['_continuous_move_rate'].get()
             return self._continuous_move_rate
 
-
-# WIP - this code is repeated three times, perhaps we can fix that
-        # settings for managing continuous move/resize operations
+        # update settings for managing continuous move/resize operations
         def refresh_settings(self, args):
             # if self.testing:
             #     print(f'CompassControl.Mover.refresh_settings: {args=}')
@@ -241,7 +245,8 @@ class CompassControl:
             # force a refresh for this value
             self._continuous_move_frequency = None
 
-        def continuous_init(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, dpi_x: float, dpi_y: float, direction: Direction) -> None:
+        def continuous_init(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect,
+                                                dpi_x: float, dpi_y: float, direction: Direction) -> None:
             """Initialize continuous operation"""
             with self.compass_control.continuous_mutex:
                 if self.continuous_job:
@@ -368,7 +373,8 @@ class CompassControl:
                                     center_x, center_y = next(self.continuous_bres)
 
                                     # translate center coordinates to top left
-                                    x, y = self.translate_top_left_by_region(rect, rect_id, center_x, center_y, self.compass_control.continuous_direction)
+                                    x, y = self.translate_top_left_by_region(rect, rect_id, center_x, center_y,
+                                                                                self.compass_control.continuous_direction)
                                     if self.testing:
                                         print(f'continuous_helper: next bresenham point = {center_x, center_y}, corresponding to top left = {x, y}')
                             except StopIteration:
@@ -392,7 +398,8 @@ class CompassControl:
                                 print(f'continuous_helper: stepping from {rect.x, rect.y} to {x, y}, {delta_x=}, {delta_y=}')
 
                             # print(f'continuous_helper: before move {rect=}')
-                            result, rect = _move_it(rect, rect_id, parent_rect, delta_x, delta_y, self.compass_control.continuous_direction)
+                            result, rect = _move_it(rect, rect_id, parent_rect, delta_x, delta_y,
+                                                                    self.compass_control.continuous_direction)
                             self.compass_control.continuous_rect = rect
                             if not result:
                                 if self.testing:
@@ -525,7 +532,8 @@ class CompassControl:
 
             return result, rect, horizontal_limit_reached, vertical_limit_reached
 
-        def move_absolute(self, rect: ui.Rect, rect_id: int, x: float, y: float, region_in: Optional[Direction] = None) -> Tuple[bool, ui.Rect]:
+        def move_absolute(self, rect: ui.Rect, rect_id: int, x: float, y: float,
+                                            region_in: Optional[Direction] = None) -> Tuple[bool, ui.Rect]:
             """Move rectangle in given direction to match the given values"""
             # find the point which we will move to the given coordinates, as indicated by the region.
             if region_in:
@@ -536,7 +544,8 @@ class CompassControl:
 
             result = False
             try:
-                result, rect = self.compass_control.set_rect(rect, rect_id, ui.Rect(round(x), round(y), round(rect.width), round(rect.height)))
+                result, rect = self.compass_control.set_rect(rect, rect_id, ui.Rect(round(x), round(y),
+                                                                        round(rect.width), round(rect.height)))
             except CompassControl.RectUpdateError as e:
                 self.compass_control._handle_rect_update_error(e)
 
@@ -603,7 +612,7 @@ class CompassControl:
             return round(top_left_x), round(top_left_y)
 
         def _clip_to_fit(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, x: float, y:
-                                            float, width: float, height: float, direction: Direction) -> Tuple[int, int, bool, bool]:
+                            float, width: float, height: float, direction: Direction) -> Tuple[int, int, bool, bool]:
             """Adjust rectangle coordinates to keep it from overlapping the limits of the screen"""
             parent_x = parent_rect.x
             parent_y = parent_rect.y
@@ -675,7 +684,10 @@ class CompassControl:
             self._continuous_resize_rate: float = None
 
             self.settings_map: Dict = settings_map
-            self.refresh_map =  { talon_setting.path: local_name for local_name, talon_setting in settings_map.items() if hasattr(self, local_name) }
+            self.refresh_map =  {
+                talon_setting.path: local_name
+                            for local_name, talon_setting in settings_map.items()
+                                                                if hasattr(self, local_name) }
 
         @property
         def verbose_warnings(self):
@@ -712,7 +724,7 @@ class CompassControl:
             self._continuous_resize_frequency = None
 
         def continuous_init(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, multiplier: int,
-                                                            dpi_x: float, dpi_y: float, direction: Optional[Direction] = None) -> None:
+                                        dpi_x: float, dpi_y: float, direction: Optional[Direction] = None) -> None:
             """Initialize continuous operation"""
             with self.compass_control.continuous_mutex:
                 if self.continuous_job:
@@ -787,11 +799,12 @@ class CompassControl:
                     self.compass_control.continuous_stop()
                 else:
                     # do the resize
-                    result, rect, resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached = self.resize_pixels_relative(
+                    many_values = self.resize_pixels_relative(
                                     rect, rect_id, parent_rect,
                                         self.continuous_width_increment, self.continuous_height_increment,
                                             self.compass_control.continuous_direction
                                 )
+                    result, rect, resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached = many_values
 
                     # save updated rectangle for next iteration
                     self.compass_control.continuous_rect = rect
