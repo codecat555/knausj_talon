@@ -117,30 +117,39 @@ class CompassControl:
         # 2021-12-08 22:59:37    IO refresh_settings: self.settings_map={'continuous_move_frequency_str': 'user.win_move_frequency', 'continuous_resize_frequency_str': 'user.win_resize_frequency', 'continuous_move_rate': 'user.win_continuous_move_rate', 'continuous_resize_rate': 'user.win_continuous_resize_rate', 'verbose_warnings': 'user.win_verbose_warnings'}
         # 2021-12-08 22:59:37    IO refresh_settings: args: args=('user.code_protected_function_formatter', <talon.scripting.types.SettingDecl.NoValueType object at 0x0000000005B7C160>)
 
+        caller_id = 'CompassControl'
         if args:
-            # fetch updated settings
-            talon_name = args[0]
-            try:
-                local_name = self.refresh_map[talon_name]
-            except KeyError:
-                # not one of our settings
-                pass
-            else:
-                self.__setattr__(local_name, args[1])
-
-                if self.testing:
-                    print(f'CompassControl.refresh_settings: received updated value for {talon_name}: {getattr(self, local_name, None)}')
+            CompassControl._update_setting(self, caller_id, args)
         else:
-            # fetch all our settings
-            for local_name, talon_setting in self.settings_map.items():
-                if hasattr(self, local_name):
-                    self.__setattr__(local_name, talon_setting.get())
-
-                    if self.testing:
-                        print(f'CompassControl.refresh_settings: received updated value for {talon_setting.path}: {getattr(self, local_name, None)}')
+            CompassControl._update_all_settings(self, caller_id)
 
         self.mover.refresh_settings(args)
         self.sizer.refresh_settings(args)
+
+    @classmethod
+    def _update_all_settings(cls, caller, caller_id: str) -> None:
+        # fetch all our settings
+        for local_name, talon_setting in caller.settings_map.items():
+            if hasattr(caller, local_name):
+                caller.__setattr__(local_name, talon_setting.get())
+
+                if caller.testing:
+                    print(f'{caller_id}._update_all_settings: received updated value for {talon_setting.path}: {getattr(caller, local_name, None)}')
+
+    @classmethod
+    def _update_setting(cls, caller, caller_id: str, args):
+        # fetch updated settings
+        talon_name = args[0]
+        try:
+            local_name = caller.refresh_map[talon_name]
+        except KeyError:
+                # not one of our settings
+            pass
+        else:
+            caller.__setattr__(local_name, args[1])
+
+            if caller.testing:
+                print(f'{caller_id}._update_setting: received updated value for {talon_name}: {getattr(caller, local_name, None)}')
 
     # error thrown when a mover resize request is not completely successful
     class RectUpdateError(Exception):
@@ -221,27 +230,13 @@ class CompassControl:
         # settings for managing continuous move/resize operations
         def refresh_settings(self, args):
             # if self.testing:
-            #     print(f'CompassControl.Mover.refresh_settings: {self.settings_map=}')
+            #     print(f'CompassControl.Mover.refresh_settings: {args=}')
 
+            caller_id = 'CompassControl.Mover'
             if args:
-                talon_name = args[0]
-                try:
-                    local_name = self.refresh_map[talon_name]
-                except KeyError:
-                    # not one of our settings
-                    pass
-                else:
-                    self.__setattr__(local_name, args[1])
-
-                    if self.testing:
-                        print(f'CompassControl.Mover.refresh_settings: received updated value for {talon_name}: {getattr(self, local_name, None)}')
+                self.compass_control._update_setting(self, caller_id, args)
             else:
-                for local_name, talon_setting in self.settings_map.items():
-                    if hasattr(self, local_name):
-                        self.__setattr__(local_name, talon_setting.get())
-
-                        if self.testing:
-                            print(f'CompassControl.Mover.refresh_settings: received updated value for {talon_setting.path}: {getattr(self, local_name, None)}')
+                self.compass_control._update_all_settings(self, caller_id)
 
             # force a refresh for this value
             self._continuous_move_frequency = None
@@ -707,25 +702,11 @@ class CompassControl:
             return self._continuous_resize_rate
 
         def refresh_settings(self, args):
+            caller_id = 'CompassControl.Sizer'
             if args:
-                talon_name = args[0]
-                try:
-                    local_name = self.refresh_map[talon_name]
-                except KeyError:
-                    # not one of our settings
-                    pass
-                else:
-                    self.__setattr__(local_name, args[1])
-
-                    if self.testing:
-                        print(f'CompassControl.Sizer.refresh_settings: received updated value for {talon_name}: {getattr(self, local_name, None)}')
+                self.compass_control._update_setting(self, caller_id, args)
             else:
-                for local_name, talon_setting in self.settings_map.items():
-                    if hasattr(self, local_name):
-                        self.__setattr__(local_name, talon_setting.get())
-
-                        if self.testing:
-                            print(f'CompassControl.Sizer.refresh_settings: received updated value for {talon_setting.path}: {getattr(self, local_name, None)}')
+                self.compass_control._update_all_settings(self, caller_id)
 
             # force a refresh for this value
             self._continuous_resize_frequency = None
@@ -825,23 +806,22 @@ class CompassControl:
                                 self.continuous_width_increment = 0
                                 self.continuous_height_increment = 0
                         elif direction_count == 2:    # diagonal
-                            # WIP - use any here too
-                            if resize_left_limit_reached or resize_right_limit_reached:
+                            if any([resize_left_limit_reached, resize_right_limit_reached]):
                                 if self.testing:
                                     print(f'continuous_helper: horizontal limit reached')
                                 self.continuous_width_increment = 0
                             #
-                            if resize_up_limit_reached or resize_down_limit_reached:
+                            if any([resize_up_limit_reached, resize_down_limit_reached]):
                                 if self.testing:
                                     print(f'continuous_helper: vertical limit reached')
                                 self.continuous_height_increment = 0
                         elif direction_count == 4:    # from center
-                            if resize_left_limit_reached and resize_right_limit_reached:
+                            if all([resize_left_limit_reached, resize_right_limit_reached]):
                                 if self.testing:
                                     print(f'continuous_helper: horizontal limit reached')
                                 self.continuous_width_increment = 0
 
-                            if resize_up_limit_reached and resize_down_limit_reached:
+                            if all([resize_up_limit_reached, resize_down_limit_reached]):
                                 if self.testing:
                                     print(f'continuous_helper: vertical limit reached')
                                 self.continuous_height_increment = 0
