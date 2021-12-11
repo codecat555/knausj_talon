@@ -45,8 +45,39 @@ import time
 from talon import ui, Module, ctrl, cron, Context, settings
 from talon.types.point import Point2d
 
+## talon stuff
+
+mod = Module()
+
+# # context used to enable/disable the tag for controlling whether the 'stop' command is active
+ctx = Context()
+
+# mod.mode("window_tweak_command", "Mode to enable commands for controlling continuous move/resize operations")
+
+# taken from https: //talon.wiki/unofficial_talon_docs/#captures
+#
 # a type for representing compass directions
 Direction = Dict[str, bool]
+#
+@mod.capture(rule="center | ((north | south) [(east | west)] | east | west)")
+def compass_direction(m: List) -> Direction:
+    """
+    Matches on a basic compass direction to return which keys should
+    be pressed.
+    """
+    result = {}
+
+    if "center" in m:
+        result["up"] = result["down"] = result["right"] = result["left"] = True
+    else:
+        result = {
+            "up": "north" in m,
+            "down": "south" in m,
+            "right": "east" in m,
+            "left": "west" in m
+        }
+
+    return result
 
 class CompassControl:
 
@@ -1605,34 +1636,6 @@ class CompassControl:
     def get_diagonal_length(self, rect: ui.Rect) -> float:
         """Get diagonal length of given rectangle"""
         return math.sqrt(((rect.width - rect.x) ** 2) + ((rect.height - rect.y) ** 2))
-
-## talon stuff
-
-mod = Module()
-
-# # context used to enable/disable the tag for controlling whether the 'stop' command is active
-ctx = Context()
-
-# taken from https: //talon.wiki/unofficial_talon_docs/#captures
-@mod.capture(rule="center | ((north | south) [(east | west)] | east | west)")
-def compass_direction(m: List) -> Direction:
-    """
-    Matches on a basic compass direction to return which keys should
-    be pressed.
-    """
-    result = {}
-
-    if "center" in m:
-        result["up"] = result["down"] = result["right"] = result["left"] = True
-    else:
-        result = {
-            "up": "north" in m,
-            "down": "south" in m,
-            "right": "east" in m,
-            "left": "west" in m
-        }
-
-    return result
 
 # explicitly trigger re-import of dependent modules, since the talon reload mechanism won't do it
 DEPENDENTS = [ 'window_tweak.py' ]

@@ -23,11 +23,165 @@ from talon import ui, Module, Context, actions, imgui, settings, app
 from .compass_control import CompassControl, Direction, compass_direction
 
 # # turn debug messages on and off
-testing: bool = True
+testing: bool = False
 
 win_compass_control = None
 compass_control = None
 ctx_stop = None
+
+# talon stuff
+
+mod = Module()
+
+TAG_NAME = 'window_tweak_running'
+tag = mod.tag(TAG_NAME, desc="Enable stop command during continuous window move/resize.")
+
+# context used to enable/disable window_tweak_running tag
+ctx = Context()
+
+setting_move_frequency = mod.setting(
+    "win_move_frequency",
+    type=str,
+    default="40ms",
+    desc="The update frequency used when moving a window continuously",
+)
+setting_resize_frequency = mod.setting(
+    "win_resize_frequency",
+    type=str,
+    default="40ms",
+    desc="The update frequency used when resizing a window continuously",
+)
+setting_move_rate = mod.setting(
+    "win_continuous_move_rate",
+    type=float,
+    default=4.5,
+    desc="The target speed, in cm/sec, for continuous move operations",
+)
+setting_resize_rate = mod.setting(
+    "win_continuous_resize_rate",
+    type=float,
+    default=4.0,
+    desc="The target speed, in cm/sec, for continuous resize operations",
+)
+mod.setting(
+    "win_hide_move_gui",
+    type=int,
+    default=0,
+    desc="When enabled, the 'Move/Resize Window' GUI will not be shown for continuous move operations.",
+)
+mod.setting(
+    "win_hide_resize_gui",
+    type=int,
+    default=0,
+    desc="When enabled, the 'Move/Resize Window' GUI will not be shown for continuous resize operations.",
+)
+mod.setting(
+    "win_set_queue_timeout",
+    type=float,
+    default=0.2,
+    desc="How long to wait (in seconds) for talon to signal completion of window move/resize requests.",
+)
+mod.setting(
+    "win_set_retries",
+    type=int,
+    default=1,
+    desc="How many times to retry a timed out talon window move/resize request.",
+)
+setting_verbose_warnings = mod.setting(
+    "win_verbose_warnings",
+    type=bool,
+    default=False,
+    # window move and resize requests are not guaranteed
+    desc="Whether to generate a warning when the result of a window move or resize request does not exactly match the request.",
+)
+
+@imgui.open(y=0)
+def win_stop_gui(gui: imgui.GUI) -> None:
+    gui.text(f"Say 'win stop' or click below.")
+    gui.line()
+    if gui.button("Stop moving/resizing"):
+        actions.user.win_stop()
+
+@imgui.open(x=2100, y=40)
+# @imgui.open(x=4000,y=244)
+def _win_show_gui(gui: imgui.GUI) -> None:
+    w = ui.active_window()
+
+    gui.text(f"== Window ==")
+
+    gui.text(f"Id: {w.id}")
+    gui.spacer()
+
+    x = w.rect.x
+    y = w.rect.y
+    width = w.rect.width
+    height = w.rect.height
+
+    gui.text(f"Top Left: {x, y}")
+    gui.text(f"Top Right: {x + width, y}")
+    gui.text(f"Bottom Left: {x, y + height}")
+    gui.text(f"Bottom Right: {x + width, y + height}")
+    gui.text(f"Center: {round(w.rect.center.x), round(w.rect.center.y)}")
+    gui.spacer()
+
+    gui.text(f"Width: {round(width)}")
+    gui.text(f"Height: {round(height)}")
+
+    gui.line()
+
+    screen = w.screen
+    gui.text(f"== Screen ==")
+    gui.spacer()
+
+    #gui.text(f"Name: {screen.name}")
+    # gui.text(f"DPI: {screen.dpi}")
+    # gui.text(f"DPI_x: {screen.dpi_x}")
+    # gui.text(f"DPI_y: {screen.dpi_y}")
+    #gui.text(f"Scale: {screen.scale}")
+    #gui.spacer()
+
+    x = screen.visible_rect.x
+    y = screen.visible_rect.y
+    width = screen.visible_rect.width
+    height = screen.visible_rect.height
+
+    gui.text(f"__Visible Rectangle__")
+    gui.text(f"Top Left: {round(x), round(y)}")
+    gui.text(f"Top Right: {round(x + width), round(y)}")
+    gui.text(f"Bottom Left: {round(x), round(y + height)}")
+    gui.text(f"Bottom Right: {round(x + width), round(y + height)}")
+    gui.text(f"Center: {round(screen.visible_rect.center.x), round(screen.visible_rect.center.y)}")
+    gui.spacer()
+
+    gui.text(f"Width: {round(width)}")
+    gui.text(f"Height: {round(height)}")
+
+    gui.spacer()
+
+    x = screen.rect.x
+    y = screen.rect.y
+    width = screen.rect.width
+    height = screen.rect.height
+
+    gui.text(f"__Physical Rectangle__")
+    gui.text(f"Top Left: {round(x), round(y)}")
+    gui.text(f"Top Right: {round(x + width), round(y)}")
+    gui.text(f"Bottom Left: {round(x), round(y + height)}")
+    gui.text(f"Bottom Right: {round(x + width), round(y + height)}")
+    gui.text(f"Center: {round(screen.rect.center.x), round(screen.rect.center.y)}")
+    gui.spacer()
+
+    gui.text(f"Width: {round(width)}")
+    gui.text(f"Height: {round(height)}")
+
+    gui.line()
+
+    gui.text(f"Say 'win hide' to close this window.")
+
+    gui.line()
+
+    if gui.button("Close"):
+        _win_show_gui.hide()
 
 class WinCompassControl:
     @classmethod
@@ -145,79 +299,6 @@ class WinCompassControl:
         """Callback invoked by CompassControl engine after stopping a continuous operation"""
         win_stop_gui.hide()
 
-# talon stuff
-
-mod = Module()
-
-TAG_NAME = 'window_tweak_running'
-tag = mod.tag(TAG_NAME, desc="Enable stop command during continuous window move/resize.")
-
-# context used to enable/disable window_tweak_running tag
-ctx = Context()
-
-setting_move_frequency = mod.setting(
-    "win_move_frequency",
-    type=str,
-    default="40ms",
-    desc="The update frequency used when moving a window continuously",
-)
-setting_resize_frequency = mod.setting(
-    "win_resize_frequency",
-    type=str,
-    default="40ms",
-    desc="The update frequency used when resizing a window continuously",
-)
-setting_move_rate = mod.setting(
-    "win_continuous_move_rate",
-    type=float,
-    default=4.5,
-    desc="The target speed, in cm/sec, for continuous move operations",
-)
-setting_resize_rate = mod.setting(
-    "win_continuous_resize_rate",
-    type=float,
-    default=4.0,
-    desc="The target speed, in cm/sec, for continuous resize operations",
-)
-mod.setting(
-    "win_hide_move_gui",
-    type=int,
-    default=0,
-    desc="When enabled, the 'Move/Resize Window' GUI will not be shown for continuous move operations.",
-)
-mod.setting(
-    "win_hide_resize_gui",
-    type=int,
-    default=0,
-    desc="When enabled, the 'Move/Resize Window' GUI will not be shown for continuous resize operations.",
-)
-mod.setting(
-    "win_set_queue_timeout",
-    type=float,
-    default=0.2,
-    desc="How long to wait (in seconds) for talon to signal completion of window move/resize requests.",
-)
-mod.setting(
-    "win_set_retries",
-    type=int,
-    default=1,
-    desc="How many times to retry a timed out talon window move/resize request.",
-)
-setting_verbose_warnings = mod.setting(
-    "win_verbose_warnings",
-    type=bool,
-    default=False,
-    # window move and resize requests are not guaranteed
-    desc="Whether to generate a warning when the result of a window move or resize request does not exactly match the request.",
-)
-
-@imgui.open(y=0)
-def win_stop_gui(gui: imgui.GUI) -> None:
-    gui.text(f"Say 'win stop' or click below.")
-    gui.line()
-    if gui.button("Stop moving/resizing"):
-        actions.user.win_stop()
-
 def on_ready():
     """Callback invoked by Talon, where we populate our global objects"""
     global win_compass_control, compass_control, ctx_stop
@@ -258,87 +339,6 @@ def on_ready():
             _win_show_gui.hide()
 
 app.register("ready", on_ready)
-
-@imgui.open(x=2100, y=40)
-# @imgui.open(x=4000,y=244)
-def _win_show_gui(gui: imgui.GUI) -> None:
-    w = ui.active_window()
-
-    gui.text(f"== Window ==")
-
-    gui.text(f"Id: {w.id}")
-    gui.spacer()
-
-    x = w.rect.x
-    y = w.rect.y
-    width = w.rect.width
-    height = w.rect.height
-
-    gui.text(f"Top Left: {x, y}")
-    gui.text(f"Top Right: {x + width, y}")
-    gui.text(f"Bottom Left: {x, y + height}")
-    gui.text(f"Bottom Right: {x + width, y + height}")
-    gui.text(f"Center: {round(w.rect.center.x), round(w.rect.center.y)}")
-    gui.spacer()
-
-    gui.text(f"Width: {round(width)}")
-    gui.text(f"Height: {round(height)}")
-
-    gui.line()
-
-    screen = w.screen
-    gui.text(f"== Screen ==")
-    gui.spacer()
-
-    #gui.text(f"Name: {screen.name}")
-    # gui.text(f"DPI: {screen.dpi}")
-    # gui.text(f"DPI_x: {screen.dpi_x}")
-    # gui.text(f"DPI_y: {screen.dpi_y}")
-    #gui.text(f"Scale: {screen.scale}")
-    #gui.spacer()
-
-    x = screen.visible_rect.x
-    y = screen.visible_rect.y
-    width = screen.visible_rect.width
-    height = screen.visible_rect.height
-
-    gui.text(f"__Visible Rectangle__")
-    gui.text(f"Top Left: {round(x), round(y)}")
-    gui.text(f"Top Right: {round(x + width), round(y)}")
-    gui.text(f"Bottom Left: {round(x), round(y + height)}")
-    gui.text(f"Bottom Right: {round(x + width), round(y + height)}")
-    gui.text(f"Center: {round(screen.visible_rect.center.x), round(screen.visible_rect.center.y)}")
-    gui.spacer()
-
-    gui.text(f"Width: {round(width)}")
-    gui.text(f"Height: {round(height)}")
-
-    gui.spacer()
-
-    x = screen.rect.x
-    y = screen.rect.y
-    width = screen.rect.width
-    height = screen.rect.height
-
-    gui.text(f"__Physical Rectangle__")
-    gui.text(f"Top Left: {round(x), round(y)}")
-    gui.text(f"Top Right: {round(x + width), round(y)}")
-    gui.text(f"Bottom Left: {round(x), round(y + height)}")
-    gui.text(f"Bottom Right: {round(x + width), round(y + height)}")
-    gui.text(f"Center: {round(screen.rect.center.x), round(screen.rect.center.y)}")
-    gui.spacer()
-
-    gui.text(f"Width: {round(width)}")
-    gui.text(f"Height: {round(height)}")
-
-    gui.line()
-
-    gui.text(f"Say 'win hide' to close this window.")
-
-    gui.line()
-
-    if gui.button("Close"):
-        _win_show_gui.hide()
 
 @mod.action_class
 class Actions:
