@@ -8,18 +8,16 @@
 # talon resize() API behavior, which will not increase height beyond 1625 for some reason...perhaps related to
 # the height of the largest of my 3 screens (which is height 1600).
 #
-# WIP - here's a weird one: I have vscode maximized on my left hand screen and say 'win size one thousand by one thousand',
-# WIP - first it resizes and then jumps to my primary Screen to the right.
+# - here's a weird one: I have vscode maximized on my left hand screen and say 'win size one thousand by one thousand',
+# first it resizes, as expected, but then jumps to my primary Screen to the right.
 
-from typing import Optional, Dict, Tuple
+from typing import Optional, Tuple
 
 import queue
 import logging
 import time
 
-from talon import ui, Module, Context, actions, ctrl, imgui, cron, settings, app
-from talon.types.point import Point2d
-from talon.debug import log_exception
+from talon import ui, Module, Context, actions, imgui, settings, app
 
 # globals
 from .compass_control import CompassControl, Direction, compass_direction
@@ -32,12 +30,6 @@ compass_control = None
 ctx_stop = None
 
 class WinCompassControl:
-
-    def __init__(self, tag_name: str):
-        # tag used to enable/disable commands used during window move/resize operations
-        self.continuous_tag_name: str = tag_name
-        self.continuous_tag_name_qualified: str = 'user.' + self.continuous_tag_name
-
     @classmethod
     def win_set_rect(cls, old_rect: ui.Rect, rect_id: int, rect_in: ui.Rect) -> Tuple[bool, ui.Rect]:
         """Callback invoked by CompassControl engine for updating the window rect using talon API"""
@@ -233,7 +225,7 @@ def on_ready():
     # if testing:
     #     print(f"on_ready: {settings.get('user.win_continuous_move_rate')=}")
 
-    win_compass_control= WinCompassControl(TAG_NAME)
+    win_compass_control= WinCompassControl()
 
     compass_control_settings = {
         '_continuous_move_frequency_str':   setting_move_frequency,
@@ -243,7 +235,7 @@ def on_ready():
         '_verbose_warnings':                setting_verbose_warnings
     }
     compass_control= CompassControl(
-        win_compass_control.continuous_tag_name,
+        TAG_NAME,
         win_compass_control.win_set_rect,
         win_compass_control.win_stop,
         compass_control_settings,
@@ -410,10 +402,10 @@ class Actions:
 
     def win_resize_absolute(target_width: float, target_height: float, region: Optional[Direction] = None) -> None:
         "Size window to given absolute dimensions, optionally by stretching/shrinking in the direction indicated by the given region"
-        
+
         if not region:
             region = compass_direction(['center'])
-            
+
         w = ui.active_window()
 
         compass_control.sizer.resize_absolute(w.rect, w.id, target_width, target_height, region)
