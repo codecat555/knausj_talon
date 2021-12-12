@@ -85,12 +85,12 @@ wheel upper: user.mouse_scroll_up_continuous()
 wheel upper here:
     user.mouse_move_center_active_window()
     user.mouse_scroll_up_continuous()
-wheel gaze: user.mouse_gaze_scroll()
-wheel gaze here:
+(wheel gaze|gazerbeam): user.mouse_gaze_scroll()
+(wheel gaze|gazerbeam) here:
     user.mouse_move_center_active_window()
     user.mouse_gaze_scroll()
-wheel stop: user.mouse_scroll_stop()
-wheel stop here:
+(wheel stop|gazeout): user.mouse_scroll_stop()
+(wheel stop|gazeout) here:
     user.mouse_move_center_active_window()
     user.mouse_scroll_stop()
 wheel left: mouse_scroll(0, -40)
