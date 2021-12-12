@@ -50,6 +50,9 @@ inside (double quotes | dubquotes):
 inside (graves | back ticks):
 	insert("``")
 	key(left)
+inside (angles):
+	insert("<>")
+	key(left)
 angle that:
     text = edit.selected_text()
     user.paste("<{text}>")
