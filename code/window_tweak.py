@@ -346,7 +346,6 @@ def on_ready():
         def win_stop() -> None:
             "Stops current window move/resize operation"
             compass_control.continuous_stop()
-            _win_show_gui.hide()
 
 app.register("ready", on_ready)
 
