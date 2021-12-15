@@ -7,17 +7,24 @@
 # - Windows on a screen (window_tweak.py)
 # - Pieces on a game board
 # - Elements of a diagram
-# - Moving 3D objects within a 2D view frame.
+# - Moving 3D objects within a view frame.
 # - Tiles in a visual programming environment (e.g. Grasshopper 3D)
 # - Panes of an IDE window
 #
 # Continuous move/resize machinery adapted from mouse.py.
 # """
 
+# WIP - 'win move northeast <number> pixels' is not working properly, moving too far
 # WIP - check that diagonal distance in pixels is accurate
 
 # TODO
-# Implement antipodal direction - just need to swap sign on the increments for 'win move center'...I think. Need a better term, too many . anticenter? outer? away? far?!
+# perhaps we shouldn't be using 'win move in'/'win move out' because in a 3D application it would be most natural to use in and out for the z axis... 
+# 'win seek'/'win flee'
+# 'win suck'/'win blow'
+# 'win move central'/'win move distal'
+# 'win move near'/'win move far'
+
+# Could implement actions to mirror window's position about some axis
 
 # WIP - here are some quirks that need work:
 #
@@ -52,14 +59,12 @@ mod = Module()
 # # context used to enable/disable the tag for controlling whether the 'stop' command is active
 ctx = Context()
 
-# mod.mode("window_tweak_command", "Mode to enable commands for controlling continuous move/resize operations")
-
 # taken from https: //talon.wiki/unofficial_talon_docs/#captures
 #
 # a type for representing compass directions
 Direction = Dict[str, bool]
 #
-@mod.capture(rule="center | ((north | south) [(east | west)] | east | west)")
+@mod.capture(rule="in | out | center | ((north | south) [(east | west)] | east | west)")
 def compass_direction(m: List) -> Direction:
     """
     Matches on a basic compass direction to return which keys should
@@ -67,7 +72,9 @@ def compass_direction(m: List) -> Direction:
     """
     result = {}
 
-    if "center" in m:
+    if "in" in m or "center" in m:
+        result["up"] = result["down"] = result["right"] = result["left"] = False
+    elif "out" in m:
         result["up"] = result["down"] = result["right"] = result["left"] = True
     else:
         result = {
@@ -138,7 +145,7 @@ class CompassControl:
         #     # print(f'refresh_settings: {self.settings_map=}')
         #     print(f'CompassControl.refresh_settings: args: {args=}')
 
-        # WIP - should chase down this...bug?
+        # WIP - is this a bug, the fact that the settings below seem to be constantly changing (see code.py)?
         # 2021-12-08 22:59:37    IO CompassControl.refresh_settings: arg='user.code_public_function_formatter'
         # 2021-12-08 22:59:37    IO CompassControl.refresh_settings: arg=<talon.scripting.types.SettingDecl.NoValueType object at 0x0000000005B7C160>
         # 2021-12-08 22:59:37    IO CompassControl.Mover.refresh_settings: args=('user.code_public_function_formatter', <talon.scripting.types.SettingDecl.NoValueType object at 0x0000000005B7C160>)
@@ -219,6 +226,9 @@ class CompassControl:
             self.continuous_width_increment: int = 0
             self.continuous_height_increment: int = 0
             self.continuous_job: Any = None
+
+            self.continuous_target_x: float = None
+            self.continuous_target_y: float = None
 
             # bresenham generator used for 'move to center' operations
             self.continuous_bres: Iterator[(int, int)] = None
@@ -304,19 +314,32 @@ class CompassControl:
                     print(f'init_continuous: {self.continuous_width_increment=}, {self.continuous_height_increment=}')
 
                 direction_count = sum(self.compass_control.continuous_direction.values())
-                if direction_count == 4:    # move to center (special case)
-                    # follow path from rectangle center to parent rectangle center
-                    x0 = round(rect.center.x)
-                    y0 = round(rect.center.y)
+                if direction_count == 0 or direction_count == 4:    # move in/out (special case)
+                    # follow path from rectangle center to the target point
 
+                    x0 = rect.x
+                    y0 = rect.y
+                    
                     x1, y1 = self.compass_control.get_target_point(rect, rect_id, parent_rect, direction)
 
-                    # note that this is based on the line from rectangle center to parent rectangle center, resulting
+                    if self.testing:
+                        print(f'init_continuous: bresenham line - {x0, y0} -> {x1, y1}')
+
+                    self.continuous_target_x = x1
+                    self.continuous_target_y = y1
+                    
+                    # note that this is based on the line from rectangle center to the target point, resulting
                     # coordinates will have to be translated to top left to set rectangle position, etc.
                     self.continuous_bres = self.compass_control.bresenham(x0, y0, x1, y1)
 
                     # discard initial point (we're already there)
                     next(self.continuous_bres)
+
+                    # if we're already there, zero the increment
+                    if x0 == x1:
+                        self.continuous_width_increment = 0
+                    if y0 == y1:
+                        self.continuous_height_increment = 0
 
                 self._continuous_start()
 
@@ -337,12 +360,10 @@ class CompassControl:
                 if not result:
                     if self.testing:
                         print(f'continuous_helper: rectangle move failed. {result=}, {rect=}, {horizontal_limit_reached=}, {vertical_limit_reached=}')
-                    # self.compass_control.continuous_stop()
                 elif (horizontal_limit_reached and vertical_limit_reached): # both limits reached, we are done
                     if self.testing:
                         print(f'continuous_helper: rectangle move is complete. {result=}, {rect=}, {horizontal_limit_reached=}, {vertical_limit_reached=}')
-                    # self.compass_control.continuous_stop()
-                    result = False
+                    result = True
                 else: # check whether one of the limits has been reached
                     if horizontal_limit_reached:
                         self.continuous_width_increment = 0
@@ -380,34 +401,40 @@ class CompassControl:
 
                 if self.continuous_width_increment or self.continuous_height_increment:
                     direction_count = sum(self.compass_control.continuous_direction.values())
-                    if direction_count != 4:
+                    if direction_count == 1 or direction_count == 2:
                         result, rect = _move_it(rect, rect_id, parent_rect, self.continuous_width_increment,
                                                         self.continuous_height_increment, self.compass_control.continuous_direction)
+                        # self.continuous_rect = rect
                         self.compass_control.continuous_rect = rect
                         if not result:
                             if self.testing:
                                 print(f'continuous_helper: move failed')
                             self.compass_control.continuous_stop()
-                    else:    # move to center (special case)
+                    else:    # move in/out
                         initial_x = rect.x
                         initial_y = rect.y
                         cumulative_delta_x = cumulative_delta_y = 0
-                        center_x = center_y = 0
+                        # we break out of this loop for three reasons:
+                        # 1. if we reach the target coordinates (exhaust bresenham iterator)
+                        # 2. if we fail to actually move to the intended coordinates for some reason
+                        # 3. if we move past the current maximum distance (horizontally or vertically) for one iteration
                         while True:
                             if self.testing:
-                                print(f'continuous_helper: current rectangle top left = {rect.x, rect.y}')
+                                print(f'continuous_helper: current top left = {rect.x, rect.y}')
 
                             (x, y) = (round(rect.x), round(rect.y))
                             try:
+                # WIP - this loop is not really necessary...chuck it
                                 # skip until we see some movement
                                 while (x, y) == (round(rect.x), round(rect.y)):
-                                    center_x, center_y = next(self.continuous_bres)
+                                    # center_x, center_y = next(self.continuous_bres)
+                                    x, y = next(self.continuous_bres)
 
-                                    # translate center coordinates to top left
-                                    x, y = self.translate_top_left_by_region(rect, rect_id, center_x, center_y,
-                                                                                self.compass_control.continuous_direction)
                                     if self.testing:
-                                        print(f'continuous_helper: next bresenham point = {center_x, center_y}, corresponding to top left = {x, y}')
+                                        print(f'continuous_helper: next bresenham point = {x, y}')
+
+                                if self.testing:
+                                    print(f'continuous_helper: new top left = {x, y}')
                             except StopIteration:
                                 if self.testing:
                                     print(f'continuous_helper: StopIteration')
@@ -418,11 +445,13 @@ class CompassControl:
                                 break
 
                             delta_x = abs(x - rect.x)
-                            if self.continuous_width_increment < 0:
+                            if self.continuous_target_x < x:
+                                # keep everything moving in the right direction
                                 delta_x *= -1
 
                             delta_y = abs(y - rect.y)
-                            if self.continuous_height_increment < 0:
+                            if self.continuous_target_y < y:
+                                # keep everything moving in the right direction
                                 delta_y *= -1
 
                             if self.testing:
@@ -430,8 +459,10 @@ class CompassControl:
 
                             # print(f'continuous_helper: before move {rect=}')
                             result, rect = _move_it(rect, rect_id, parent_rect, delta_x, delta_y,
-                                                                    self.compass_control.continuous_direction)
+                                                            self.compass_control.continuous_direction)
                             self.compass_control.continuous_rect = rect
+
+                            # check pass or fail
                             if not result:
                                 if self.testing:
                                     print(f'continuous_helper: move failed')
@@ -439,20 +470,24 @@ class CompassControl:
                                 break
                             # print(f'continuous_helper: after move {rect=}')
 
+                            # check whether we've gone far enough for this iteration
+                            #
+                            # horizontal check
                             cumulative_delta_x = abs(rect.x - initial_x)
                             if self.testing:
                                 print(f'continuous_helper: {cumulative_delta_x=}, {self.continuous_width_increment=}')
                             if self.continuous_width_increment != 0 and cumulative_delta_x >= abs(self.continuous_width_increment):
                                 if self.testing:
-                                    print(f'continuous_helper: reached horizontal limit for current iteration, stopping')
+                                    print(f'continuous_helper: moved horizontally as far as possible for current iteration, stopping')
                                 break
-
+                            #
+                            # vertical check
                             cumulative_delta_y = abs(rect.y - initial_y)
                             if self.testing:
                                 print(f'continuous_helper: {cumulative_delta_y=}, {self.continuous_height_increment=}')
                             if self.continuous_height_increment != 0 and cumulative_delta_y >= abs(self.continuous_height_increment):
                                 if self.testing:
-                                    print(f'continuous_helper: reached vertical limit for current iteration, stopping')
+                                    print(f'continuous_helper: moved vertically as far as possible for current iteration, stopping')
                                 break
                 else:
                     # move increments are both zero, nothing to do...so stop
@@ -475,6 +510,8 @@ class CompassControl:
                 self.continuous_width_increment = 0
                 self.continuous_height_increment = 0
                 self.continuous_job = None
+                self.continuous_target_x = None
+                self.continuous_target_y = None
                 self.continuous_bres = None
 
         def move_pixels_relative(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect,
@@ -494,7 +531,7 @@ class CompassControl:
 
             # apply changes as indicated
             direction_count = sum(direction.values())
-            if direction_count < 4:
+            if direction_count == 1 or direction_count == 2:
                 if direction["left"]:
                     x -= delta_x
 
@@ -509,17 +546,20 @@ class CompassControl:
 
                 new_x, new_y, horizontal_limit_reached, vertical_limit_reached = self._clip_to_fit(
                                                         rect, rect_id, parent_rect, x, y, rect.width, rect.height, direction)
-            else:    # move to center
-                rect_width = rect.width
-                rect_height = rect.height
+            elif direction_count == 4: # move out
+                x += delta_x
+                y += delta_y
 
+                new_x, new_y, horizontal_limit_reached, vertical_limit_reached = self._clip_to_fit(
+                                                        rect, rect_id, parent_rect, x, y, rect.width, rect.height, direction)
+            else:    # move in
                 new_x = x + delta_x
                 new_y = y + delta_y
 
-                new_rect_center = Point2d(round(new_x + rect_width/2), round(new_y + rect_height/2))
+                # this branch is more complex because we need to check whether we've reached the center
 
-                target_x = round(parent_rect.center.x - rect_width/2)
-                target_y = round(parent_rect.center.y - rect_height/2)
+                target_x = round(parent_rect.center.x - rect.width / 2)
+                target_y = round(parent_rect.center.y - rect.height / 2)
 
                 # calculate distance between rectangle center and parent center
                 distance_x = round(parent_rect.center.x - rect.center.x)
@@ -527,16 +567,16 @@ class CompassControl:
 
                 if self.testing:
                     print(f'move_pixels_relative: {new_x=}, {new_y=}, {parent_rect.center.x=}, {parent_rect.center.y=}')
-                    print(f'move_pixels_relative: top left - {target_x=}, {target_y=}')
+                    print(f'move_pixels_relative: target point - {target_x=}, {target_y=}')
 
                 if (delta_x != 0):
                     if self.testing:
                         print(f'move_pixels_relative: {distance_x=}, {delta_x=}')
 
                     if (delta_x < 0 and (distance_x >= delta_x)) or (delta_x > 0 and (distance_x <= delta_x)):
-                        # crossed center point, done moving horizontally
+                        # crossed target point, done moving horizontally
                         if self.testing:
-                            print(f'move_pixels_relative: crossed horizontal center point')
+                            print(f'move_pixels_relative: crossed horizontal target point')
                         new_x = target_x
                         horizontal_limit_reached = True
 
@@ -545,9 +585,9 @@ class CompassControl:
                         print(f'move_pixels_relative: {distance_y=}, {delta_y=}')
 
                     if (delta_y < 0 and (distance_y >= delta_y)) or (delta_y > 0 and (distance_y <= delta_y)):
-                        # crossed center point, done moving vertically
+                        # crossed target point, done moving vertically
                         if self.testing:
-                            print(f'move_pixels_relative: crossed vertical center point')
+                            print(f'move_pixels_relative: crossed vertical target point')
                         new_y = target_y
                         vertical_limit_reached = True
 
@@ -633,7 +673,7 @@ class CompassControl:
                 elif region_in["left"] and region_in["down"]:
                     top_left_y = target_y - height
 
-            elif direction_count == 4:
+            elif direction_count == 0 or direction_count == 4:
                 top_left_x = target_x - width / 2
                 top_left_y = target_y - height / 2
 
@@ -859,7 +899,7 @@ class CompassControl:
                                 if self.testing:
                                     print(f'continuous_helper: vertical limit reached')
                                 self.continuous_height_increment = 0
-                        elif direction_count == 4:    # from center
+                        elif direction_count == 0 or direction_count == 4:    # in/out
                             if all([resize_left_limit_reached, resize_right_limit_reached]):
                                 if self.testing:
                                     print(f'continuous_helper: horizontal limit reached')
@@ -1013,7 +1053,8 @@ class CompassControl:
 
                     #print(f'resize_pixels_relative: left and down')
 
-            elif direction_count == 4:    # stretch from center
+            elif direction_count == 0 or direction_count == 4:    # stretch to/from center
+                # are delta values are divisible by two?
                 if (delta_width == 0 or abs(delta_width) >= 2) and (delta_height == 0 or abs(delta_height) >= 2):
                     # normal case, delta values are divisible by two
                     new_x = new_x - delta_width / 2
@@ -1207,7 +1248,7 @@ class CompassControl:
                     # adjust x to account for the entire change in width
                     x = x - delta_width
 
-            elif direction_count == 4:
+            elif direction_count == 0 or direction_count == 4:
                 # resize in all directions
                 x = x - delta_width / 2
                 y = y - delta_height / 2
@@ -1324,15 +1365,25 @@ class CompassControl:
                 width_increment = dpms_x * frequency
                 height_increment = dpms_y * frequency
 
-                if direction_count == 4 and operation == 'move':    # move to center
+                if direction_count == 0 and operation == 'move':    # move in (toward the center)
                     if self.testing:
-                        print(f"get_continuous_parameters: 'move center' special case")
+                        print(f"get_continuous_parameters: 'move in' special case")
 
                     # special case, return signed values
                     if rect.center.x > parent_rect.center.x:
                         width_increment *= -1
                     #
                     if rect.center.y > parent_rect.center.y:
+                        height_increment *= -1
+                elif direction_count == 4 and operation == 'move':    # move out (away from center)
+                    if self.testing:
+                        print(f"get_continuous_parameters: 'move out' special case")
+
+                    # special case, return signed values
+                    if rect.center.x < parent_rect.center.x:
+                        width_increment *= -1
+                    #
+                    if rect.center.y < parent_rect.center.y:
                         height_increment *= -1
 
             if self.testing:
@@ -1464,15 +1515,40 @@ class CompassControl:
 
         return center_to_center_rect, horizontal_multiplier, vertical_multiplier
 
+    def get_center_to_intercept_rect(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect) -> Tuple[ui.Rect, bool, bool]:
+# WIP - rephrase
+        """Return rectangle whose diagonal is the line connecting the center of the given rectangle with the center decenter line intercept um with the parent rectangle"""
+        width = rect.width
+        height = rect.y
+
+        rect_center = rect.center
+
+        intercept_x, intercept_y = self.get_center_to_center_intercept(rect, parent_rect)
+
+        width = abs(rect_center.x - intercept_x)
+        horizontal_multiplier = 1 if rect_center.x <= intercept_x else -1
+
+        height = abs(rect_center.y - intercept_y)
+        vertical_multiplier = 1 if rect_center.y <= intercept_y else -1
+
+        result_rect = ui.Rect(round(intercept_x), round(rect_center.y), round(width), round(height))
+        print(f'get_center_to_intercept_rect: returning {result_rect=}, {horizontal_multiplier=}, {vertical_multiplier=}')
+
+        return result_rect, horizontal_multiplier, vertical_multiplier
+
     def get_component_dimensions(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect,
                                     distance: float, direction: Direction, operation: str) -> Tuple[int, int]:
         """Return horizontal and vertical distances corresponding to the given distance along the diagonal of the given rectangle"""
         delta_width = delta_height = 0
         direction_count = sum(direction.values())
-        if operation == 'move' and direction_count == 4:    # move to center
-            # this is a special case - 'move center' - we return signed values for this case only
+        if operation == 'move' and (direction_count == 0 or direction_count == 4):    # in/out
+            # this is a special case - we return signed values for this case only
 
-            rect, horizontal_multiplier, vertical_multiplier = self.get_center_to_center_rect(rect, rect_id, parent_rect)
+            if direction_count == 0:    # in
+                rect, horizontal_multiplier, vertical_multiplier = self.get_center_to_center_rect(rect, rect_id, parent_rect)
+            else:
+                rect, horizontal_multiplier, vertical_multiplier = self.get_center_to_intercept_rect(rect, rect_id, parent_rect)
+
             diagonal_length = self.get_diagonal_length(rect)
 
             rect_center = rect.center
@@ -1522,10 +1598,13 @@ class CompassControl:
         """Return horizontal and vertical distances corresponding to the given percentage of the diagonal of the given rectangle"""
         if self.testing:
             print(f'_get_component_dimensions_by_percent: {percent=}')
-
+            
         direction_count = sum(direction.values())
-        if operation == 'move' and direction_count == 4:    # move to center
-            rect, *unused = self.get_center_to_center_rect(rect, rect_id, parent_rect)
+        if operation == 'move':
+            if direction_count == 0:    # in
+                rect, *unused = self.get_center_to_center_rect(rect, rect_id, parent_rect)
+            else:
+                rect, *unused = self.get_center_to_intercept_rect(rect, rect_id, parent_rect)
 
         if direction_count  == 1:    # horizontal or vertical
             if direction["left"] or direction["right"]:
@@ -1619,17 +1698,103 @@ class CompassControl:
         """Return coordinates of the rectangle center"""
         return round(rect.center.x), round(rect.center.y)
 
+    # from https://stackoverflow.com/questions/9526726/find-the-cgpoint-on-a-uiview-rectangle-intersected-by-a-straight-line-at-a-given
+    # return coordinates of the point at which the center-to-center line crosses the nearest parent edges
+    def get_center_to_center_intercept(self, rect, parent_rect) -> Tuple[float, float]:
+    
+        # handle special case which would otherwise result in division by zero in subsequent code
+        if parent_rect.center.x == rect.center.x:
+            result_x = rect.center.x
+
+            if rect.center.y > parent_rect.center.y:
+                result_y = parent_rect.y + parent_rect.height
+                print(f'get_center_to_center_intercept: below - {result_x=}, {result_y=}')
+            else:
+                result_y = parent_rect.y
+                print(f'get_center_to_center_intercept: above - {result_x=}, {result_y=}')
+
+            if self.testing:
+                angle_between = math.radians(90)
+                print(f'get_center_to_center_intercept: {angle_between=} ({math.degrees(angle_between)} degrees), {result_x=}, {result_y=}')
+                
+            return round(result_x), round(result_y)
+
+        # get the angle between the center-to-center line and the horizontal
+        #
+        # a horizontal line has a slope of zero
+        slope1 = 0
+        #
+        # get slope of the center-to-center line between the two rectangles
+        slope2 = (rect.center.y - parent_rect.center.y) / (rect.center.x - parent_rect.center.x)
+
+        # from https://math.stackexchange.com/questions/1269050/finding-the-angle-between-two-line-equations
+        angle_between = math.atan(slope2)
+        if rect.center.x < parent_rect.center.x:
+            angle_between += math.radians(180)
+        if angle_between < 0:
+            angle_between += math.radians(360)
+        
+        tan_angle_between = math.tan(angle_between)
+
+        radius_x = parent_rect.width / 2
+        radius_y = parent_rect.height / 2
+
+        # get y intersection with right edge
+        relative_result_y = radius_x * tan_angle_between
+
+        # is y within the parent rect or outside?
+        if abs(relative_result_y) <= radius_y:
+            # it's inside => the intercept is on the right edge or left edge
+
+            if angle_between < (math.pi / 2) or angle_between > 3 * (math.pi / 2):
+                # right edge
+                relative_result_x = radius_x
+            else:
+                # left edge
+                relative_result_x = -radius_x
+                relative_result_y = -relative_result_y
+        else:
+            # it's outside - the intercept is on the top edge or bottom edge
+
+            # get x instersection with bottom edge
+            relative_result_x = radius_y / tan_angle_between
+
+            if angle_between < math.pi:
+                # bottom edge
+                relative_result_y = radius_y
+            else:
+                # top edge
+                relative_result_x = -relative_result_x
+                relative_result_y = -radius_y
+
+        # apply the relative offset to the parent center to get the actual coordinates
+        result_x = parent_rect.center.x + relative_result_x
+        result_y = parent_rect.center.y + relative_result_y
+
+        if self.testing:
+            print(f'get_center_to_center_intercept: {angle_between=} ({math.degrees(angle_between)} degrees), {radius_x=}, {radius_y=}, {result_x=}, {result_y=}')
+
+        return round(result_x), round(result_y)
+
     def get_target_point(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, direction: Direction) -> Tuple[int, int]:
-        """Return coordinates of the rectangle point indicated by the given direction"""
+# WIP - rephrase
+        """Return coordinates of the top left corner of the given rectangle as indicated by the given direction"""
         target_x = target_y = None
 
         direction_count = sum(direction.values())
-        if direction_count == 1:    # horizontal or vertical
+        if direction_count == 0:    #  in/center
+            # get top left coordinate when rectangle is at parent center
+            target_x = round(parent_rect.center.x - (rect.width / 2))
+            target_y = round(parent_rect.center.y - (rect.height / 2))
+        elif direction_count == 1:    # horizontal or vertical
             target_x, target_y = self.get_edge_midpoint(parent_rect, direction)
         elif direction_count == 2:    # diagonal
             target_x, target_y = self.get_corner(parent_rect, direction)
-        elif direction_count == 4:    # center
-            target_x, target_y = self.get_center(parent_rect)
+        elif direction_count == 4:    # out
+            center_intercept_x, center_intercept_y = self.get_center_to_center_intercept(rect, parent_rect)
+            # translate center coordinates to top left
+            target_x = round(center_intercept_x - (rect.width / 2))
+            target_y = round(center_intercept_y - (rect.height / 2))
 
         return target_x, target_y
 
@@ -1637,14 +1802,14 @@ class CompassControl:
         """Get diagonal length of given rectangle"""
         return math.sqrt(((rect.width - rect.x) ** 2) + ((rect.height - rect.y) ** 2))
 
-# explicitly trigger re-import of dependent modules, since the talon reload mechanism won't do it
-DEPENDENTS = [ 'window_tweak.py' ]
+# # explicitly trigger re-import of dependent modules, since the talon reload mechanism won't do it
+# DEPENDENTS = [ 'window_tweak.py' ]
 
-print(f'compass_control.py - triggering re-import of dependent modules: {DEPENDENTS}')
+# print(f'compass_control.py - triggering re-import of dependent modules: {DEPENDENTS}')
 
-import os
-from pathlib import Path
+# import os
+# from pathlib import Path
 
-curdir = os.path.dirname(__file__)
-for dependent in DEPENDENTS:
-    Path(os.path.join(curdir, dependent)).touch()
+# curdir = os.path.dirname(__file__)
+# for dependent in DEPENDENTS:
+#     Path(os.path.join(curdir, dependent)).touch()

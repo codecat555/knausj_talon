@@ -228,6 +228,7 @@ class WinCompassControl:
             start_time_rect = time.time_ns()
             w.rect = rect_in
             try:
+    # WIP - this should not be necessary, the break statement only executes if there were no registrations...so, why did it seem to fix the problem?
                 # this try block is really to catch queue.Empty if raised by the queue get call below,
                 # we keep the rest of this code in the same block so that any callbacks registered here
                 # will necessarily be unregistered in the finally clause...else you start getting timeouts
@@ -243,7 +244,7 @@ class WinCompassControl:
                     event_count += 1
                 if event_count == 0:
                     # no real work to do
-                    result = True, rect_in
+                    result = False, rect_in
 
                     if testing:
                         print('_win_set_rect: nothing to do, window already matches given rect.')
