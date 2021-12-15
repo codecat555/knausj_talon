@@ -14,8 +14,6 @@
 # Continuous move/resize machinery adapted from mouse.py.
 # """
 
-# WIP - 'win move northeast <number> pixels' is not working properly, moving too far
-# WIP - check that diagonal distance in pixels is accurate
 
 # TODO
 # perhaps we shouldn't be using 'win move in'/'win move out' because in a 3D application it would be most natural to use in and out for the z axis... 
@@ -424,17 +422,8 @@ class CompassControl:
 
                             (x, y) = (round(rect.x), round(rect.y))
                             try:
-                # WIP - this loop is not really necessary...chuck it
-                                # skip until we see some movement
-                                while (x, y) == (round(rect.x), round(rect.y)):
                                     # center_x, center_y = next(self.continuous_bres)
                                     x, y = next(self.continuous_bres)
-
-                                    if self.testing:
-                                        print(f'continuous_helper: next bresenham point = {x, y}')
-
-                                if self.testing:
-                                    print(f'continuous_helper: new top left = {x, y}')
                             except StopIteration:
                                 if self.testing:
                                     print(f'continuous_helper: StopIteration')
@@ -443,6 +432,9 @@ class CompassControl:
 
                                 # return
                                 break
+
+                            if self.testing:
+                                print(f'continuous_helper: new top left = {x, y}')
 
                             delta_x = abs(x - rect.x)
                             if self.continuous_target_x < x:
@@ -550,8 +542,14 @@ class CompassControl:
                 x += delta_x
                 y += delta_y
 
+                if self.testing:
+                    print(f'move_pixels_relative: before clipping - new_x={x}, new_y={y}')
+
                 new_x, new_y, horizontal_limit_reached, vertical_limit_reached = self._clip_to_fit(
                                                         rect, rect_id, parent_rect, x, y, rect.width, rect.height, direction)
+
+                if self.testing:
+                    print(f'move_pixels_relative: after clipping - {new_x=}, {new_y=}, {horizontal_limit_reached=}, {vertical_limit_reached=}')
             else:    # move in
                 new_x = x + delta_x
                 new_y = y + delta_y
@@ -591,11 +589,23 @@ class CompassControl:
                         new_y = target_y
                         vertical_limit_reached = True
 
-            try:
-                # make it so
-                result, rect = self.compass_control.set_rect(rect, rect_id, ui.Rect(new_x, new_y, rect.width, rect.height))
-            except CompassControl.RectUpdateError as e:
-                self.compass_control._handle_rect_update_error(e)
+            if (new_x, new_y) == (rect.x, rect.y):
+                # nothing to change, this can happen via clipping...the delta values indicate a change,
+                # but in the end the clipping prevents it from going ahead.
+                result = True
+
+                if self.testing:
+                    print(f'move_pixels_relative: already there, nothing to do')
+            else:
+                try:
+                    # make it so
+                    new_rect = ui.Rect(new_x, new_y, rect.width, rect.height)
+                    if self.testing:
+                        print(f'move_pixels_relative: setting new rect: {rect} -> {new_rect}')
+
+                    result, rect = self.compass_control.set_rect(rect, rect_id, new_rect)
+                except CompassControl.RectUpdateError as e:
+                    self.compass_control._handle_rect_update_error(e)
 
             elapsed_time_ms = (time.time_ns() - start_time) / 1e6
             if self.testing:
@@ -1267,7 +1277,7 @@ class CompassControl:
                 # print(f'_clip_left: left clipping')
 
                 # update width before updating new_x
-                width = width - (x - parent_rect.x)
+                width = width - (parent_rect.x - x)
                 x = parent_rect.x
 
                 resize_left_limit_reached = True
@@ -1305,7 +1315,7 @@ class CompassControl:
             if x + width > parent_rect.x + parent_rect.width and direction['right']:
                 # print(f'_clip_right: right clipping')
 
-                width = parent_rect.x + parent_rect.width - x
+                width = parent_rect.x + parent_rect.width - rect.x
 
                 if self.testing:
                     print(f'_clip_right: {resize_right_limit_reached=}')
@@ -1322,12 +1332,12 @@ class CompassControl:
             if y + height > parent_rect.y + parent_rect.height and direction['down']:
                 # print(f'_clip_down: down clipping')
 
-                height = parent_rect.y + parent_rect.height - y
+                height = parent_rect.y + parent_rect.height - rect.y
 
                 resize_down_limit_reached = True
 
                 if self.testing:
-                    print(f'_clip_right: {resize_down_limit_reached=}')
+                    print(f'_clip_down: {resize_down_limit_reached=}')
 
             return round(y), round(height), resize_down_limit_reached
 
@@ -1546,7 +1556,7 @@ class CompassControl:
 
             if direction_count == 0:    # in
                 rect, horizontal_multiplier, vertical_multiplier = self.get_center_to_center_rect(rect, rect_id, parent_rect)
-            else:
+            else: # direction_count == 4
                 rect, horizontal_multiplier, vertical_multiplier = self.get_center_to_intercept_rect(rect, rect_id, parent_rect)
 
             diagonal_length = self.get_diagonal_length(rect)
@@ -1603,7 +1613,7 @@ class CompassControl:
         if operation == 'move':
             if direction_count == 0:    # in
                 rect, *unused = self.get_center_to_center_rect(rect, rect_id, parent_rect)
-            else:
+            elif direction_count == 4:
                 rect, *unused = self.get_center_to_intercept_rect(rect, rect_id, parent_rect)
 
         if direction_count  == 1:    # horizontal or vertical

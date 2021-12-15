@@ -191,7 +191,7 @@ class WinCompassControl:
         if not rect_in:
             raise ValueError('rect_in is None')
 
-        retries = settings.get('user.win_set_retries')
+        max_retries = retries = settings.get('user.win_set_retries')
         queue_timeout = settings.get('user.win_set_queue_timeout')
 
         # rect update code adapted from https://talonvoice.slack.com/archives/C9MHQ4AGP/p1635971780355900
@@ -224,33 +224,38 @@ class WinCompassControl:
         result = False, old_rect
 
         while retries >= 0:
+            # this try block is really to catch queue.Empty if raised by the queue get call below,
+            # we keep the rest of this code in the same block so that any callbacks registered here
+            # will necessarily be unregistered in the finally clause...else you start getting timeouts
+            # from the API calls.
+            event_count = 0
+            if (rect_in.x, rect_in.y) != (w.rect.x, w.rect.y):
+                print(f'_win_set_rect: register win_move')
+                ui.register('win_move', on_move)
+                event_count += 1
+            if (rect_in.width, rect_in.height) != (w.rect.width, w.rect.height):
+                print(f'_win_set_rect: register win_resize')
+                ui.register('win_resize', on_resize)
+                event_count += 1
+            if event_count == 0:
+                # sometimes the queue get below times out, yet by the time we loop around here
+                # for a retry, the set operation has completed successfully. then, the checks above
+                # fall through to this block. so, the result we return is based on whether this is
+                # our first time through the loop or not.
+                success = retries < max_retries
+                    
+                # no real work to do
+                result = success, rect_in
+
+                if testing:
+                    print('_win_set_rect: nothing to do, window already matches given rect.')
+
+                break
+
             # do it to it
             start_time_rect = time.time_ns()
             w.rect = rect_in
             try:
-    # WIP - this should not be necessary, the break statement only executes if there were no registrations...so, why did it seem to fix the problem?
-                # this try block is really to catch queue.Empty if raised by the queue get call below,
-                # we keep the rest of this code in the same block so that any callbacks registered here
-                # will necessarily be unregistered in the finally clause...else you start getting timeouts
-                # from the API calls.
-                event_count = 0
-                if (rect_in.x, rect_in.y) != (w.rect.x, w.rect.y):
-                    print(f'_win_set_rect: register win_move')
-                    ui.register('win_move', on_move)
-                    event_count += 1
-                if (rect_in.width, rect_in.height) != (w.rect.width, w.rect.height):
-                    print(f'_win_set_rect: register win_resize')
-                    ui.register('win_resize', on_resize)
-                    event_count += 1
-                if event_count == 0:
-                    # no real work to do
-                    result = False, rect_in
-
-                    if testing:
-                        print('_win_set_rect: nothing to do, window already matches given rect.')
-
-                    break
-
                 # for testing
                 #raise queue.Empty()
                 #raise Exception('just testing')
