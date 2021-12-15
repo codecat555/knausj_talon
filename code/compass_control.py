@@ -14,15 +14,19 @@
 # Continuous move/resize machinery adapted from mouse.py.
 # """
 
+# WIP - scan for bare print statements and remove trailing spaces
+# WIP - review 'win shrink' automatic stop logic for both cases
+# WIP - simplify the larger functions by moving some code into subroutines
 
 # TODO
-# perhaps we shouldn't be using 'win move in'/'win move out' because in a 3D application it would be most natural to use in and out for the z axis... 
+# -perhaps we shouldn't be using 'win move in'/'win move out' because in a 3D application it would be most natural to use in and out for the z axis... 
 # 'win seek'/'win flee'
 # 'win suck'/'win blow'
 # 'win move central'/'win move distal'
 # 'win move near'/'win move far'
+#
+# - could implement actions to mirror window's position about some axis
 
-# Could implement actions to mirror window's position about some axis
 
 # WIP - here are some quirks that need work:
 #
@@ -402,7 +406,6 @@ class CompassControl:
                     if direction_count == 1 or direction_count == 2:
                         result, rect = _move_it(rect, rect_id, parent_rect, self.continuous_width_increment,
                                                         self.continuous_height_increment, self.compass_control.continuous_direction)
-                        # self.continuous_rect = rect
                         self.compass_control.continuous_rect = rect
                         if not result:
                             if self.testing:
@@ -422,7 +425,6 @@ class CompassControl:
 
                             (x, y) = (round(rect.x), round(rect.y))
                             try:
-                                    # center_x, center_y = next(self.continuous_bres)
                                     x, y = next(self.continuous_bres)
                             except StopIteration:
                                 if self.testing:
@@ -529,7 +531,7 @@ class CompassControl:
 
                 if direction["right"]:
                     x += delta_x
-                #
+                
                 if direction["up"]:
                     y -= delta_y
 

@@ -224,10 +224,6 @@ class WinCompassControl:
         result = False, old_rect
 
         while retries >= 0:
-            # this try block is really to catch queue.Empty if raised by the queue get call below,
-            # we keep the rest of this code in the same block so that any callbacks registered here
-            # will necessarily be unregistered in the finally clause...else you start getting timeouts
-            # from the API calls.
             event_count = 0
             if (rect_in.x, rect_in.y) != (w.rect.x, w.rect.y):
                 print(f'_win_set_rect: register win_move')
