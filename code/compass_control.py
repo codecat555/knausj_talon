@@ -14,6 +14,7 @@
 # Continuous move/resize machinery adapted from mouse.py.
 # """
 
+# WIP - 'win stretch' is failing to clip properly
 # WIP - review 'win shrink' automatic stop logic for both cases
 # WIP - simplify the larger functions by moving some code into subroutines
 
@@ -368,6 +369,7 @@ class CompassControl:
                 elif (horizontal_limit_reached and vertical_limit_reached): # both limits reached, we are done
                     if self.testing:
                         print(f'continuous_helper: rectangle move is complete. {result=}, {rect=}, {horizontal_limit_reached=}, {vertical_limit_reached=}')
+                    self.continuous_width_increment = self.continuous_height_increment = 0
                     result = True
                 else: # check whether one of the limits has been reached
                     if horizontal_limit_reached:
@@ -707,19 +709,21 @@ class CompassControl:
 
             horizontal_limit_reached = vertical_limit_reached = False
 
+            direction_count = sum(direction.values())
+
             new_x = x
             new_y = y
-            if x <= parent_x and direction["left"]:
+            if x <= parent_x and (direction_count == 0 or direction["left"]):
                 new_x = parent_x
                 horizontal_limit_reached = True
-            elif x >= parent_x + parent_width - width and direction["right"]:
+            elif x >= parent_x + parent_width - width and (direction_count == 0 or direction["right"]):
                 new_x = parent_x + parent_width - width
                 horizontal_limit_reached = True
 
-            if y <= parent_y and direction["up"]:
+            if y <= parent_y and (direction_count == 0 or direction["up"]):
                 new_y = parent_y
                 vertical_limit_reached = True
-            elif y >= parent_y + parent_height - height and direction["down"]:
+            elif y >= parent_y + parent_height - height and (direction_count == 0 or direction["down"]):
                 new_y = parent_y + parent_height - height
                 vertical_limit_reached = True
 
@@ -1116,7 +1120,11 @@ class CompassControl:
                 if self.testing:
                     print(f'resize_pixels_relative: after left clip: {new_x=}, {new_width=}')
 
+                if self.testing:
+                    print(f'resize_pixels_relative: before up clip: {new_y=}, {new_height=}')
                 new_y, new_height, resize_up_limit_reached = self._clip_up(rect, rect_id, parent_rect, new_y, new_height, direction_in)
+                if self.testing:
+                    print(f'resize_pixels_relative: after up clip: {new_y=}, {new_height=}')
 
                 if self.testing:
                     print(f'resize_pixels_relative: before right clip: {new_x=}, {new_width=}')
@@ -1124,7 +1132,11 @@ class CompassControl:
                 if self.testing:
                     print(f'resize_pixels_relative: after right clip: {new_x=}, {new_width=}')
 
+                if self.testing:
+                    print(f'resize_pixels_relative: before down clip: {new_y=}, {new_height=}')
                 new_y, new_height, resize_down_limit_reached = self._clip_down(rect, rect_id, parent_rect, new_y, new_height, direction_in)
+                if self.testing:
+                    print(f'resize_pixels_relative: after down clip: {new_y=}, {new_height=}')
 
                 #print(f'resize_pixels_relative: from center')
 
@@ -1302,8 +1314,11 @@ class CompassControl:
             """Adjust rectangle coordinates to keep it from overlapping the left limit of the screen"""
             resize_left_limit_reached = False
 
+            direction_count = sum(direction.values())
+
             # clip to parent rectangle
-            if x < parent_rect.x and direction['left']:
+            if x < parent_rect.x and (direction_count == 0 or direction['left']):
+            
                 # print(f'_clip_left: left clipping')
 
                 # update width before updating new_x
@@ -1322,8 +1337,10 @@ class CompassControl:
             """Adjust rectangle coordinates to keep it from overlapping the upper limit of the screen"""
             resize_up_limit_reached = False
 
+            direction_count = sum(direction.values())
+
             # clip to parent rectangle
-            if y < parent_rect.y and direction['up']:
+            if y < parent_rect.y and (direction_count == 0 or direction['up']):
                 # print(f'_clip_up: up clipping')
 
                 # update height before updating y
@@ -1342,7 +1359,10 @@ class CompassControl:
             """Adjust rectangle coordinates to keep it from overlapping the right limit of the screen"""
             resize_right_limit_reached = False
 
-            if x + width > parent_rect.x + parent_rect.width and direction['right']:
+            direction_count = sum(direction.values())
+
+            # if x + width > parent_rect.x + parent_rect.width and direction['right']:
+            if x + width > parent_rect.x + parent_rect.width and (direction_count == 0 or direction['right']):
                 # print(f'_clip_right: right clipping')
 
                 width = parent_rect.x + parent_rect.width - rect.x
@@ -1359,7 +1379,10 @@ class CompassControl:
             """Adjust rectangle coordinates to keep it from overlapping the lower limit of the screen"""
             resize_down_limit_reached = False
 
-            if y + height > parent_rect.y + parent_rect.height and direction['down']:
+            direction_count = sum(direction.values())
+
+            # if y + height > parent_rect.y + parent_rect.height and direction['down']:
+            if y + height > parent_rect.y + parent_rect.height and (direction_count == 0 or direction['down']):
                 # print(f'_clip_down: down clipping')
 
                 height = parent_rect.y + parent_rect.height - rect.y
