@@ -14,18 +14,11 @@
 # Continuous move/resize machinery adapted from mouse.py.
 # """
 
+# WIP - review 'win shrink' automatic stop logic for both cases
+#
 # WIP - does 'direction' need to be passed around inside of continuous methods, since it can always be retrieved via self?
 #
 # WIP - try to shrink a window that's already at at a minimum...the API calls timeout
-#
-# WIP - 'win move out' acting weird...seems normal, then at the very end the window jumps from the top down to the bottom of the screen and stops.
-# see
-#     2021-12-16 00:10:41    IO continuous_helper: starting iteration 0 - rect=Rect(674, 161, 1636, 874)
-# and
-#     2021-12-16 00:10:58    IO continuous_helper: starting iteration 0 - rect=Rect(674, 161, 1636, 874)
-#
-# WIP - review 'win shrink' automatic stop logic for both cases
-# WIP - simplify the larger functions by moving some code into subroutines
 
 # TODO
 # -perhaps we shouldn't be using 'win move in'/'win move out' because in a 3D application it would be most natural to use in and out for the z axis... 
@@ -414,8 +407,18 @@ class CompassControl:
                 if self.testing:
                     print(f'continuous_helper: starting iteration {iteration} - {rect=}')
 
-                if self.continuous_width_increment or self.continuous_height_increment: # only proceed if there's something to do
-                    direction_count = sum(self.compass_control.continuous_direction.values())
+                direction_count = sum(self.compass_control.continuous_direction.values())
+                if (
+                    # if there's no work to do...
+                    (not (self.continuous_width_increment or self.continuous_height_increment)) or
+                    # for 'move out' operations, we stop if one of the two increments is zero
+                    (direction_count == 4 and not (self.continuous_width_increment and self.continuous_height_increment))
+                ):
+                    if self.testing:
+                        print(f'continuous_helper: rectangle move failed. {rect=}')
+                    self.compass_control.continuous_stop()
+                else:
+                    # we have work to do
                     if direction_count == 1 or direction_count == 2:
                         result, rect = _move_it(rect, rect_id, parent_rect, self.continuous_width_increment,
                                                         self.continuous_height_increment, self.compass_control.continuous_direction)
@@ -427,11 +430,6 @@ class CompassControl:
                     else:
                         # move in/out
                         rect = self._continuous_move_in_out(_move_it, rect, rect_id, parent_rect)
-                else:
-                    # move increments are both zero, nothing to do...so stop
-                    if self.testing:
-                        print(f'continuous_helper: width and height increments are both zero, nothing to do, {rect=}')
-                    self.compass_control.continuous_stop()
 
                 elapsed_time_ms = (time.time_ns() - start_time) / 1e6
                 if self.testing:
@@ -450,7 +448,23 @@ class CompassControl:
             # 1. if we reach the target coordinates (exhaust bresenham iterator)
             # 2. if we fail to actually move to the intended coordinates for some reason
             # 3. if we move past the current maximum distance (horizontally or vertically) for one iteration
-            while True:
+            direction_count = sum(self.compass_control.continuous_direction.values())
+            while (
+                    # for move in, we only stop after hitting both limits
+                    (direction_count == 0 and (self.continuous_width_increment or self.continuous_height_increment)) or
+                    # for move out, we stop after hitting the first limit
+                    (direction_count == 4 and self.continuous_width_increment and self.continuous_height_increment)
+                ):
+            # while True:
+                # if direction_count == 0:
+                #     # for move in, we only stop after hitting both limits
+                #     if self.continuous_width_increment == 0 and self.continuous_height_increment == 0:
+                #         break
+                # elif direction_count == 4:
+                #     # for move out, we stop after hitting the first limit
+                #     if self.continuous_width_increment == 0 or self.continuous_height_increment == 0:
+                #         break
+
                 if self.testing:
                     print(f'continuous_helper: current top left = {rect.x, rect.y}')
 
@@ -1837,36 +1851,36 @@ class CompassControl:
         radius_y = parent_rect.height / 2
 
         # get y intersection with right edge
-        relative_result_y = radius_x * tan_angle_between
+        relative_offset_y = radius_x * tan_angle_between
 
         # is y within the parent rect or outside?
-        if abs(relative_result_y) <= radius_y:
+        if abs(relative_offset_y) <= radius_y:
             # it's inside => the intercept is on the right edge or left edge
 
             if angle_between < (math.pi / 2) or angle_between > 3 * (math.pi / 2):
                 # right edge
-                relative_result_x = radius_x
+                relative_offset_x = radius_x
             else:
                 # left edge
-                relative_result_x = -radius_x
-                relative_result_y = -relative_result_y
+                relative_offset_x = -radius_x
+                relative_offset_y = -relative_offset_y
         else:
             # it's outside - the intercept is on the top edge or bottom edge
 
             # get x instersection with bottom edge
-            relative_result_x = radius_y / tan_angle_between
+            relative_offset_x = radius_y / tan_angle_between
 
             if angle_between < math.pi:
                 # bottom edge
-                relative_result_y = radius_y
+                relative_offset_y = radius_y
             else:
                 # top edge
-                relative_result_x = -relative_result_x
-                relative_result_y = -radius_y
+                relative_offset_x = -relative_offset_x
+                relative_offset_y = -radius_y
 
         # apply the relative offset to the parent center to get the actual coordinates
-        result_x = parent_rect.center.x + relative_result_x
-        result_y = parent_rect.center.y + relative_result_y
+        result_x = parent_rect.center.x + relative_offset_x
+        result_y = parent_rect.center.y + relative_offset_y
 
         if self.testing:
             print(f'get_center_to_center_intercept: {angle_between=} ({math.degrees(angle_between)} degrees), {radius_x=}, {radius_y=}, {result_x=}, {result_y=}')
@@ -1892,6 +1906,10 @@ class CompassControl:
             # translate center coordinates to top left
             target_x = round(center_intercept_x - (rect.width / 2))
             target_y = round(center_intercept_y - (rect.height / 2))
+            
+            if self.testing:
+                print(f'get_target_point: center to center intercept - {center_intercept_x, center_intercept_y}')
+                print(f'get_target_point: corresponding top left coordinates - {target_x, target_y}')
 
         return target_x, target_y
 
