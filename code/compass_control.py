@@ -14,8 +14,6 @@
 # Continuous move/resize machinery adapted from mouse.py.
 # """
 
-# WIP - 'win shrink west' fails when part of the window is off the left edge of the screen, at the end it jumps to the left edge of the screen to the right.
-# WIP - scan for bare print statements and remove trailing spaces
 # WIP - review 'win shrink' automatic stop logic for both cases
 # WIP - simplify the larger functions by moving some code into subroutines
 
@@ -30,6 +28,10 @@
 
 
 # WIP - here are some quirks that need work:
+#
+# - 'win shrink west' fails when the window is on my left-most screen and is off the left edge of the
+# screen, at the end it of the shrink it jumps to the left edge of the screen to the right. same thing
+# swapping west for east, left for right, etc.
 #
 # - continuous operations are sometimes choppy and randomly stop, due to API timeouts. increasing wait time
 # does not seem to help (this may be more noticeable when debug logging is enabled).
@@ -322,7 +324,7 @@ class CompassControl:
 
                     x0 = rect.x
                     y0 = rect.y
-                    
+
                     x1, y1 = self.compass_control.get_target_point(rect, rect_id, parent_rect, direction)
 
                     if self.testing:
@@ -330,7 +332,7 @@ class CompassControl:
 
                     self.continuous_target_x = x1
                     self.continuous_target_y = y1
-                    
+
                     # note that this is based on the line from rectangle center to the target point, resulting
                     # coordinates will have to be translated to top left to set rectangle position, etc.
                     self.continuous_bres = self.compass_control.bresenham(x0, y0, x1, y1)
@@ -532,7 +534,7 @@ class CompassControl:
 
                 if direction["right"]:
                     x += delta_x
-                
+
                 if direction["up"]:
                     y -= delta_y
 
@@ -1010,7 +1012,7 @@ class CompassControl:
             # direction rather than shrinking away from that direction. note that we continue to use direction_in
             # for calls to the clipping methods, this is intentional and correct.
             direction = direction_in.copy()
-            if not all(direction.values()):
+            if not all(direction.values()): # => no direction values are set
                 if delta_width < 0:
                     temp = direction["right"]
                     direction["right"] = direction["left"]
@@ -1135,33 +1137,41 @@ class CompassControl:
 
             result = False
             old_rect = rect
-            try:
-                # make it so
-                result, rect = self.compass_control.set_rect(rect, rect_id, ui.Rect(*new_values))
-            except CompassControl.RectUpdateError as e:
-                self.compass_control._handle_rect_update_error(e)
+            if (new_width, new_height) == (rect.width, rect.height):
+                # nothing to change, this can happen via clipping...the delta values indicate a change,
+                # but in the end the clipping prevents it from going ahead.
+                result = True
 
-            if not result and self.use_change_check_for_shrink:
-                # shrink is a special case, need to detect when the rectangle has shrunk to a minimum by
-                # watching expected values to see when they stop changing as requested.
-                if self.continuous_width_increment < 0:
-                    # if a change was requested and not delivered, i.e. if the requested value is not the same as the old one AND
-                    # the requested value is not the same as the current value.
-                    if (new_x != old_rect.x and rect.x == old_rect.x) and (new_width != old_rect.width and rect.width == old_rect.width):
-                        resize_left_limit_reached = True
-                        resize_right_limit_reached = True
-                        if self.testing:
-                            # print(f'resize_pixels_relative: horizontal shrink limit reached')
-                            print(f'resize_pixels_relative: horizontal shrink limit reached - {rect.x=}, {new_x=}, {rect.width=}, {new_width=}')
+                if self.testing:
+                    print(f'resize_pixels_relative: already there, nothing to do')
+            else:
+                try:
+                    # make it so
+                    result, rect = self.compass_control.set_rect(rect, rect_id, ui.Rect(*new_values))
+                except CompassControl.RectUpdateError as e:
+                    self.compass_control._handle_rect_update_error(e)
 
-                if self.continuous_height_increment < 0:
-                    # if a change was requested and not delivered, i.e. if the requested value is not the same as the old one AND
-                    # the requested value is not the same as the current value.
-                    if (new_y != old_rect.y and rect.y == old_rect.y) and (new_height != old_rect.height and rect.height == old_rect.height):
-                        resize_up_limit_reached = True
-                        resize_down_limit_reached = True
-                        if self.testing:
-                            print(f'resize_pixels_relative: vertical shrink limit reached')
+                if not result and self.use_change_check_for_shrink:
+                    # shrink is a special case, need to detect when the rectangle has shrunk to a minimum by
+                    # watching expected values to see when they stop changing as requested.
+                    if self.continuous_width_increment < 0:
+                        # if a change was requested and not delivered, i.e. if the requested value is not the same as the old one AND
+                        # the requested value is not the same as the current value.
+                        if (new_x != old_rect.x and rect.x == old_rect.x) and (new_width != old_rect.width and rect.width == old_rect.width):
+                            resize_left_limit_reached = True
+                            resize_right_limit_reached = True
+                            if self.testing:
+                                # print(f'resize_pixels_relative: horizontal shrink limit reached')
+                                print(f'resize_pixels_relative: horizontal shrink limit reached - {rect.x=}, {new_x=}, {rect.width=}, {new_width=}')
+
+                    if self.continuous_height_increment < 0:
+                        # if a change was requested and not delivered, i.e. if the requested value is not the same as the old one AND
+                        # the requested value is not the same as the current value.
+                        if (new_y != old_rect.y and rect.y == old_rect.y) and (new_height != old_rect.height and rect.height == old_rect.height):
+                            resize_up_limit_reached = True
+                            resize_down_limit_reached = True
+                            if self.testing:
+                                print(f'resize_pixels_relative: vertical shrink limit reached')
 
             elapsed_time_ms = (time.time_ns() - start_time) / 1e6
             if self.testing:
@@ -1562,7 +1572,8 @@ class CompassControl:
         vertical_multiplier = 1 if rect_center.y <= intercept_y else -1
 
         result_rect = ui.Rect(round(intercept_x), round(rect_center.y), round(width), round(height))
-        print(f'get_center_to_intercept_rect: returning {result_rect=}, {horizontal_multiplier=}, {vertical_multiplier=}')
+        if self.testing:
+            print(f'get_center_to_intercept_rect: returning {result_rect=}, {horizontal_multiplier=}, {vertical_multiplier=}')
 
         return result_rect, horizontal_multiplier, vertical_multiplier
 
@@ -1628,7 +1639,7 @@ class CompassControl:
         """Return horizontal and vertical distances corresponding to the given percentage of the diagonal of the given rectangle"""
         if self.testing:
             print(f'_get_component_dimensions_by_percent: {percent=}')
-            
+
         direction_count = sum(direction.values())
         if operation == 'move':
             if direction_count == 0:    # in
@@ -1731,7 +1742,7 @@ class CompassControl:
     # from https://stackoverflow.com/questions/9526726/find-the-cgpoint-on-a-uiview-rectangle-intersected-by-a-straight-line-at-a-given
     # return coordinates of the point at which the center-to-center line crosses the nearest parent edges
     def get_center_to_center_intercept(self, rect, parent_rect) -> Tuple[float, float]:
-    
+
         # handle special case which would otherwise result in division by zero in subsequent code
         if parent_rect.center.x == rect.center.x:
             result_x = rect.center.x
@@ -1746,7 +1757,7 @@ class CompassControl:
             if self.testing:
                 angle_between = math.radians(90)
                 print(f'get_center_to_center_intercept: {angle_between=} ({math.degrees(angle_between)} degrees), {result_x=}, {result_y=}')
-                
+
             return round(result_x), round(result_y)
 
         # get the angle between the center-to-center line and the horizontal
@@ -1763,7 +1774,7 @@ class CompassControl:
             angle_between += math.radians(180)
         if angle_between < 0:
             angle_between += math.radians(360)
-        
+
         tan_angle_between = math.tan(angle_between)
 
         radius_x = parent_rect.width / 2

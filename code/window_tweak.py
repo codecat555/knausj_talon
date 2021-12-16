@@ -365,8 +365,6 @@ class Actions:
         if not direction:
             direction = compass_direction(['center'])
 
-        print(f'win_move: {direction=}')
-
         w = ui.active_window()
 
         compass_control.mover.continuous_init(w.rect, w.id, w.screen.visible_rect, w.screen.dpi_x, w.screen.dpi_y, direction)
