@@ -14,8 +14,6 @@
 # Continuous move/resize machinery adapted from mouse.py.
 # """
 
-# WIP - try to shrink a window that's already at at a minimum...the API calls time out instead of returning some (unambiguous) indication
-
 # TODO
 # -perhaps we shouldn't be using 'win move in'/'win move out' because in a 3D application it would
 # be most natural to use in and out for the z axis... 
@@ -379,6 +377,97 @@ class CompassControl:
 
                 return result, rect
 
+            def _continuous_move_in_out(self, _move_it: Callable, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect):
+                initial_x = rect.x
+                initial_y = rect.y
+                cumulative_delta_x = cumulative_delta_y = 0
+                # we break out of this loop for three reasons:
+                # 1. if we reach the target coordinates (exhaust bresenham iterator)
+                # 2. if we fail to actually move to the intended coordinates for some reason
+                # 3. if we move past the current maximum distance (horizontally or vertically) for one iteration
+                direction_count = sum(self.compass_control.continuous_direction.values())
+                while (
+                        # for move in, we only stop after hitting both limits
+                        (direction_count == 0 and (self.continuous_width_increment or self.continuous_height_increment)) or
+                        # for move out, we stop after hitting the first limit
+                        (direction_count == 4 and self.continuous_width_increment and self.continuous_height_increment)
+                    ):
+                # while True:
+                    # if direction_count == 0:
+                    #     # for move in, we only stop after hitting both limits
+                    #     if self.continuous_width_increment == 0 and self.continuous_height_increment == 0:
+                    #         break
+                    # elif direction_count == 4:
+                    #     # for move out, we stop after hitting the first limit
+                    #     if self.continuous_width_increment == 0 or self.continuous_height_increment == 0:
+                    #         break
+
+                    if self.testing:
+                        print(f'continuous_helper: current top left = {rect.x, rect.y}')
+
+                    (x, y) = (round(rect.x), round(rect.y))
+                    try:
+                            x, y = next(self.continuous_bres)
+                    except StopIteration:
+                        if self.testing:
+                            print(f'continuous_helper: StopIteration')
+
+                        self.compass_control.continuous_stop()
+
+                        # return
+                        break
+
+                    if self.testing:
+                        print(f'continuous_helper: new top left = {x, y}')
+
+                    delta_x = abs(x - rect.x)
+                    if self.continuous_target_x < x:
+                        # keep everything moving in the right direction
+                        delta_x *= -1
+
+                    delta_y = abs(y - rect.y)
+                    if self.continuous_target_y < y:
+                        # keep everything moving in the right direction
+                        delta_y *= -1
+
+                    if self.testing:
+                        print(f'continuous_helper: stepping from {rect.x, rect.y} to {x, y}, {delta_x=}, {delta_y=}')
+
+                    # print(f'continuous_helper: before move {rect=}')
+                    result, rect = _move_it(rect, rect_id, parent_rect, delta_x, delta_y,
+                                                                self.compass_control.continuous_direction)
+                    self.compass_control.continuous_rect = rect
+
+                    # check pass or fail
+                    if not result:
+                        if self.testing:
+                            print(f'continuous_helper: move failed')
+                        self.compass_control.continuous_stop()
+                        break
+                        # print(f'continuous_helper: after move {rect=}')
+
+                    # check whether we've gone far enough for this iteration
+                    #
+                    # horizontal check
+                    cumulative_delta_x = abs(rect.x - initial_x)
+                    if self.testing:
+                        print(f'continuous_helper: {cumulative_delta_x=}, {self.continuous_width_increment=}')
+                    if self.continuous_width_increment != 0 and cumulative_delta_x >= abs(self.continuous_width_increment):
+                        if self.testing:
+                            print(f'continuous_helper: moved horizontally as far as possible for current iteration, stopping')
+                        break
+                    #
+                    # vertical check
+                    cumulative_delta_y = abs(rect.y - initial_y)
+                    if self.testing:
+                        print(f'continuous_helper: {cumulative_delta_y=}, {self.continuous_height_increment=}')
+                    if self.continuous_height_increment != 0 and cumulative_delta_y >= abs(self.continuous_height_increment):
+                        if self.testing:
+                            print(f'continuous_helper: moved vertically as far as possible for current iteration, stopping')
+                        break
+
+                return rect
+
             start_mutex_wait = time.time_ns()
             with self.compass_control.continuous_mutex:
                 iteration = self.compass_control.continuous_iteration
@@ -425,7 +514,7 @@ class CompassControl:
                             self.compass_control.continuous_stop()
                     else:
                         # move in/out
-                        rect = self._continuous_move_in_out(_move_it, rect, rect_id, parent_rect)
+                        rect = _continuous_move_in_out(self, _move_it, rect, rect_id, parent_rect)
 
                 elapsed_time_ms = (time.time_ns() - start_time) / 1e6
                 if self.testing:
@@ -435,97 +524,6 @@ class CompassControl:
                         logging.warning(f'continuous_helper: move iteration {iteration} took {elapsed_time_ms}ms, longer than the current move_frequency setting. actual rate may not match the continuous_rate setting.')
 
                 self.compass_control.continuous_iteration += 1
-
-        def _continuous_move_in_out(self, _move_it, rect, rect_id, parent_rect):
-            initial_x = rect.x
-            initial_y = rect.y
-            cumulative_delta_x = cumulative_delta_y = 0
-            # we break out of this loop for three reasons:
-            # 1. if we reach the target coordinates (exhaust bresenham iterator)
-            # 2. if we fail to actually move to the intended coordinates for some reason
-            # 3. if we move past the current maximum distance (horizontally or vertically) for one iteration
-            direction_count = sum(self.compass_control.continuous_direction.values())
-            while (
-                    # for move in, we only stop after hitting both limits
-                    (direction_count == 0 and (self.continuous_width_increment or self.continuous_height_increment)) or
-                    # for move out, we stop after hitting the first limit
-                    (direction_count == 4 and self.continuous_width_increment and self.continuous_height_increment)
-                ):
-            # while True:
-                # if direction_count == 0:
-                #     # for move in, we only stop after hitting both limits
-                #     if self.continuous_width_increment == 0 and self.continuous_height_increment == 0:
-                #         break
-                # elif direction_count == 4:
-                #     # for move out, we stop after hitting the first limit
-                #     if self.continuous_width_increment == 0 or self.continuous_height_increment == 0:
-                #         break
-
-                if self.testing:
-                    print(f'continuous_helper: current top left = {rect.x, rect.y}')
-
-                (x, y) = (round(rect.x), round(rect.y))
-                try:
-                        x, y = next(self.continuous_bres)
-                except StopIteration:
-                    if self.testing:
-                        print(f'continuous_helper: StopIteration')
-
-                    self.compass_control.continuous_stop()
-
-                    # return
-                    break
-
-                if self.testing:
-                    print(f'continuous_helper: new top left = {x, y}')
-
-                delta_x = abs(x - rect.x)
-                if self.continuous_target_x < x:
-                    # keep everything moving in the right direction
-                    delta_x *= -1
-
-                delta_y = abs(y - rect.y)
-                if self.continuous_target_y < y:
-                    # keep everything moving in the right direction
-                    delta_y *= -1
-
-                if self.testing:
-                    print(f'continuous_helper: stepping from {rect.x, rect.y} to {x, y}, {delta_x=}, {delta_y=}')
-
-                # print(f'continuous_helper: before move {rect=}')
-                result, rect = _move_it(rect, rect_id, parent_rect, delta_x, delta_y,
-                                                            self.compass_control.continuous_direction)
-                self.compass_control.continuous_rect = rect
-
-                # check pass or fail
-                if not result:
-                    if self.testing:
-                        print(f'continuous_helper: move failed')
-                    self.compass_control.continuous_stop()
-                    break
-                    # print(f'continuous_helper: after move {rect=}')
-
-                # check whether we've gone far enough for this iteration
-                #
-                # horizontal check
-                cumulative_delta_x = abs(rect.x - initial_x)
-                if self.testing:
-                    print(f'continuous_helper: {cumulative_delta_x=}, {self.continuous_width_increment=}')
-                if self.continuous_width_increment != 0 and cumulative_delta_x >= abs(self.continuous_width_increment):
-                    if self.testing:
-                        print(f'continuous_helper: moved horizontally as far as possible for current iteration, stopping')
-                    break
-                #
-                # vertical check
-                cumulative_delta_y = abs(rect.y - initial_y)
-                if self.testing:
-                    print(f'continuous_helper: {cumulative_delta_y=}, {self.continuous_height_increment=}')
-                if self.continuous_height_increment != 0 and cumulative_delta_y >= abs(self.continuous_height_increment):
-                    if self.testing:
-                        print(f'continuous_helper: moved vertically as far as possible for current iteration, stopping')
-                    break
-
-            return rect
 
         def _continuous_reset(self) -> None:
             """Reset variables used during continuous operations"""
@@ -540,6 +538,82 @@ class CompassControl:
         def move_pixels_relative(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect,
                                         delta_x: float, delta_y: float, direction: Direction) -> Tuple[ui.Rect, bool, bool]:
             """Move rectangle in given direction as indicated by the given delta values"""
+
+            def _get_new_coordinates(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, x: float, y: float,
+                                                                delta_x: float, delta_y: float, direction: Direction):
+                horizontal_limit_reached = vertical_limit_reached = False
+
+                direction_count = sum(direction.values())
+                if direction_count == 1 or direction_count == 2:
+                    if direction["left"]:
+                        x -= delta_x
+
+                    if direction["right"]:
+                        x += delta_x
+
+                    if direction["up"]:
+                        y -= delta_y
+
+                    if direction["down"]:
+                        y += delta_y
+
+                    new_x, new_y, horizontal_limit_reached, vertical_limit_reached = self._clip_to_fit(
+                                                            rect, rect_id, parent_rect, x, y, rect.width, rect.height, direction)
+                elif direction_count == 4: # move out
+                    x += delta_x
+                    y += delta_y
+
+                    if self.testing:
+                        print(f'move_pixels_relative: before clipping - new_x={x}, new_y={y}')
+
+                    new_x, new_y, horizontal_limit_reached, vertical_limit_reached = self._clip_to_fit(
+                                                            rect, rect_id, parent_rect, x, y, rect.width, rect.height, direction)
+
+                    if self.testing:
+                        print(f'move_pixels_relative: after clipping - {new_x=}, {new_y=}, {horizontal_limit_reached=}, {vertical_limit_reached=}')
+                else:    # move in
+                    new_x = x + delta_x
+                    new_y = y + delta_y
+
+                    # this branch is more complex because we need to check whether we've reached the center
+
+                    target_x = round(parent_rect.center.x - rect.width / 2)
+                    target_y = round(parent_rect.center.y - rect.height / 2)
+
+                    # calculate distance between rectangle center and parent center
+                    distance_x = round(parent_rect.center.x - rect.center.x)
+                    distance_y = round(parent_rect.center.y - rect.center.y)
+
+                    if self.testing:
+                        print(f'move_pixels_relative: {new_x=}, {new_y=}, {parent_rect.center.x=}, {parent_rect.center.y=}')
+                        print(f'move_pixels_relative: target point - {target_x=}, {target_y=}')
+
+                    if (delta_x != 0):
+                        if self.testing:
+                            print(f'move_pixels_relative: {distance_x=}, {delta_x=}')
+
+                        if (delta_x < 0 and (distance_x >= delta_x)) or (delta_x > 0 and (distance_x <= delta_x)):
+                            # crossed target point, done moving horizontally
+                            if self.testing:
+                                print(f'move_pixels_relative: crossed horizontal target point')
+                            new_x = target_x
+                            horizontal_limit_reached = True
+
+                    if delta_y != 0:
+                        if self.testing:
+                            print(f'move_pixels_relative: {distance_y=}, {delta_y=}')
+
+                        if (delta_y < 0 and (distance_y >= delta_y)) or (delta_y > 0 and (distance_y <= delta_y)):
+                            # crossed target point, done moving vertically
+                            if self.testing:
+                                print(f'move_pixels_relative: crossed vertical target point')
+                            new_y = target_y
+                            vertical_limit_reached = True
+
+                return new_x, new_y, horizontal_limit_reached, vertical_limit_reached
+
+            # move_pixels_relative
+
             start_time = time.time_ns()
 
             result = False
@@ -552,7 +626,7 @@ class CompassControl:
                 print(f'move_pixels_relative: {delta_x=}, {delta_y=}, {x=}, {y=}')
 
             # apply changes as indicated
-            new_x, new_y, horizontal_limit_reached, vertical_limit_reached = self._get_new_coordinates(rect, rect_id, parent_rect,
+            new_x, new_y, horizontal_limit_reached, vertical_limit_reached = _get_new_coordinates(self, rect, rect_id, parent_rect,
                                                                                     x, y, delta_x, delta_y, direction)
 
             if (new_x, new_y) == (rect.x, rect.y):
@@ -578,78 +652,6 @@ class CompassControl:
                 print(f'move_pixels_relative: done {result=} ({elapsed_time_ms} ms)')
 
             return result, rect, horizontal_limit_reached, vertical_limit_reached
-
-        def _get_new_coordinates(self, rect, rect_id, parent_rect, x, y, delta_x, delta_y, direction):
-            horizontal_limit_reached = vertical_limit_reached = False
-
-            direction_count = sum(direction.values())
-            if direction_count == 1 or direction_count == 2:
-                if direction["left"]:
-                    x -= delta_x
-
-                if direction["right"]:
-                    x += delta_x
-
-                if direction["up"]:
-                    y -= delta_y
-
-                if direction["down"]:
-                    y += delta_y
-
-                new_x, new_y, horizontal_limit_reached, vertical_limit_reached = self._clip_to_fit(
-                                                        rect, rect_id, parent_rect, x, y, rect.width, rect.height, direction)
-            elif direction_count == 4: # move out
-                x += delta_x
-                y += delta_y
-
-                if self.testing:
-                    print(f'move_pixels_relative: before clipping - new_x={x}, new_y={y}')
-
-                new_x, new_y, horizontal_limit_reached, vertical_limit_reached = self._clip_to_fit(
-                                                        rect, rect_id, parent_rect, x, y, rect.width, rect.height, direction)
-
-                if self.testing:
-                    print(f'move_pixels_relative: after clipping - {new_x=}, {new_y=}, {horizontal_limit_reached=}, {vertical_limit_reached=}')
-            else:    # move in
-                new_x = x + delta_x
-                new_y = y + delta_y
-
-                # this branch is more complex because we need to check whether we've reached the center
-
-                target_x = round(parent_rect.center.x - rect.width / 2)
-                target_y = round(parent_rect.center.y - rect.height / 2)
-
-                # calculate distance between rectangle center and parent center
-                distance_x = round(parent_rect.center.x - rect.center.x)
-                distance_y = round(parent_rect.center.y - rect.center.y)
-
-                if self.testing:
-                    print(f'move_pixels_relative: {new_x=}, {new_y=}, {parent_rect.center.x=}, {parent_rect.center.y=}')
-                    print(f'move_pixels_relative: target point - {target_x=}, {target_y=}')
-
-                if (delta_x != 0):
-                    if self.testing:
-                        print(f'move_pixels_relative: {distance_x=}, {delta_x=}')
-
-                    if (delta_x < 0 and (distance_x >= delta_x)) or (delta_x > 0 and (distance_x <= delta_x)):
-                        # crossed target point, done moving horizontally
-                        if self.testing:
-                            print(f'move_pixels_relative: crossed horizontal target point')
-                        new_x = target_x
-                        horizontal_limit_reached = True
-
-                if delta_y != 0:
-                    if self.testing:
-                        print(f'move_pixels_relative: {distance_y=}, {delta_y=}')
-
-                    if (delta_y < 0 and (distance_y >= delta_y)) or (delta_y > 0 and (distance_y <= delta_y)):
-                        # crossed target point, done moving vertically
-                        if self.testing:
-                            print(f'move_pixels_relative: crossed vertical target point')
-                        new_y = target_y
-                        vertical_limit_reached = True
-
-            return new_x, new_y, horizontal_limit_reached, vertical_limit_reached
 
         def move_absolute(self, rect: ui.Rect, rect_id: int, x: float, y: float,
                                             region_in: Optional[Direction] = None) -> Tuple[bool, ui.Rect]:
@@ -964,7 +966,7 @@ class CompassControl:
 
             self.compass_control.continuous_iteration += 1
 
-        def _check_history_for_max_shrinkage(self, rect):
+        def _check_history_for_max_shrinkage(self, rect: ui.Rect):
             # shrink is a special case, need to detect when the rectangle has shrunk to a minimum by
             # watching expected values to see when they stop changing as requested.
             if self.continuous_width_increment < 0 or self.continuous_height_increment < 0:
@@ -983,7 +985,7 @@ class CompassControl:
                 # update history
                 self.continuous_resize_history.append(value)
 
-        def _check_resize_limits(self, resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached):
+        def _check_resize_limits(self, resize_left_limit_reached: bool, resize_up_limit_reached: bool, resize_right_limit_reached: bool, resize_down_limit_reached: bool) -> None:
             direction = self.compass_control.continuous_direction
             direction_count = sum(direction.values())
             if direction_count == 1:    # horizontal or vertical
@@ -1217,7 +1219,7 @@ class CompassControl:
 
             return result, rect, resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached
 
-        def _check_change_for_max_shrinkage(self, rect, new_x, new_y, new_width, new_height, old_rect):
+        def _check_change_for_max_shrinkage(self, rect: ui.Rect, new_x: float, new_y: float, new_width: float, new_height: float, old_rect: ui.Rect):
             # shrink is a special case, need to detect when the rectangle has shrunk to a minimum by
             # watching expected values to see when they stop changing as requested.
 
@@ -1245,7 +1247,7 @@ class CompassControl:
             return resize_left_limit_reached,resize_up_limit_reached,resize_right_limit_reached,resize_down_limit_reached
 
         def resize_absolute(self, rect: ui.Rect, rect_id: int, target_width: float,
-                                        target_height: float, region_in: Optional[Direction] = None) -> None:
+                                        target_height: float, region_in: Optional[Direction] = None) -> Tuple[bool, ui.Rect]:
             """Change size in given direction to match the given values"""
             x = rect.x
             y = rect.y
@@ -1282,6 +1284,8 @@ class CompassControl:
             if self.testing:
                 print(f'resize_absolute: {rect=}')
                 ctrl.mouse_move(rect.x, rect.y)
+
+            return result, rect
 
         def translate_top_left_by_region(self, rect: ui.Rect, rect_id: int,
                         target_width: float, target_height: float, direction: Direction) -> Tuple[int, int]:
@@ -1603,11 +1607,19 @@ class CompassControl:
 
         old_rect = rect
 
-        # move rectangle center to parent rectangle center
-        self.mover.move_absolute(rect, rect_id, parent_rect.center.x, parent_rect.center.y, direction)
-
-        # set rectangle size
-        self.sizer.resize_absolute(rect, rect_id, target_width, target_height, direction)
+        if (rect.x, rect.y) != (parent_rect.center.x, parent_rect.center.y):
+            # move rectangle center to parent rectangle center
+            result, rect = self.mover.move_absolute(rect, rect_id, parent_rect.center.x, parent_rect.center.y, direction)
+            if not result:
+                if self.testing:
+                    print(f'snap: move to center failed, {rect=}')
+            
+        if (rect.width, rect.height) != (parent_rect.width, parent_rect.height):
+            # set rectangle size
+            result, rect = self.sizer.resize_absolute(rect, rect_id, target_width, target_height, direction)
+            if not result:
+                if self.testing:
+                    print(f'snap: resize failed, {rect=}')
 
         self.continuous_old_rect = old_rect
 
@@ -1632,8 +1644,7 @@ class CompassControl:
         return center_to_center_rect, horizontal_multiplier, vertical_multiplier
 
     def get_center_to_intercept_rect(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect) -> Tuple[ui.Rect, bool, bool]:
-# WIP - rephrase
-        """Return rectangle whose diagonal is the line connecting the center of the given rectangle with the center decenter line intercept um with the parent rectangle"""
+        """Return rectangle with corners at the center of the parent rectangle and at the center-to-center intercept point"""
         width = rect.width
         height = rect.y
 
@@ -1894,8 +1905,7 @@ class CompassControl:
         return round(result_x), round(result_y)
 
     def get_target_point(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, direction: Direction) -> Tuple[int, int]:
-# WIP - rephrase
-        """Return coordinates of the top left corner of the given rectangle as indicated by the given direction"""
+        """Return the target point indicated by the given direction"""
         target_x = target_y = None
 
         direction_count = sum(direction.values())
