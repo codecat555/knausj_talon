@@ -7,20 +7,19 @@
 # - Windows on a screen (window_tweak.py)
 # - Pieces on a game board
 # - Elements of a diagram
-# - Moving 3D objects within a view frame.
+# - Moving 3D objects within a 2D view frame.
 # - Tiles in a visual programming environment (e.g. Grasshopper 3D)
 # - Panes of an IDE window
 #
 # Continuous move/resize machinery adapted from mouse.py.
 # """
 
-# WIP - compare translate_top_left_by_region() logic between mover and sizer
-
 # TODO
-# -perhaps we shouldn't be using 'win move in'/'win move out' because in a 3D application it would
-# be most natural to use in and out for the z axis... 
+# -perhaps we shouldn't be using 'win move in'/'win move out' because, for 3D, it would
+# be most natural to use in and out for the z axis...
 # 'win seek'/'win flee'
 # 'win suck'/'win blow'
+# 'win here'/'win there'
 # 'win move central'/'win move distal'
 # 'win move near'/'win move far'
 #
@@ -36,18 +35,34 @@
 # screen, at the end it of the shrink it jumps to the left edge of the screen to the right. same thing
 # swapping west for east, left for right, etc.
 #
-# - continuous operations are sometimes choppy and randomly stop, due to API timeouts. increasing wait time
-# does not seem to help (this may be more noticeable when debug logging is enabled).
+# - continuous operations are sometimes choppy and randomly stop, due to API delay and timeouts.
+# increasing the queue time out doesn't seem to help (this may be more noticeable when debug logging
+# is enabled).
 #
-# - need help with 'win shrink' automatic stop mechanisms. both mechanisms are hindered by the API
-# timeouts that happen when the window hits a minimum size. the change checking approach also fails
-# because updates will sometimes partially fail even before the window has reached its minimum size. can
-# repro with 'win shrink' command. see use_resize_history_for_shrink # and use_change_check_for_shrink.
+# - need help with 'win shrink' automatic stop mechanisms. both mechanisms I've implemented are hindered
+# by the API timeouts that happen when the window hits a minimum size. the 'change checking' approach also
+# fails because rect assignment will sometimes partially fail even before the window has reached its
+# minimum size. can repro with 'win shrink' command. see use_resize_history_for_shrink and
+# use_change_check_for_shrink.
 #
 # - on my Kubuntu 20.10 system, diagonal continuous stretch stops when the first diminension is clipped rather
 # then continuing along the second diminesion until that limit is reached. this is because the visible rect size
 # is the same as the physical rect size even though they are not really the same. Tried auto-hiding the 'taskbar',
 # no difference.
+#
+# - is this a bug, the fact that the settings below seem to be constantly changing? see 'settings register' below
+# and code.py.
+# 2021-12-08 22:59:37    IO CompassControl.refresh_settings: arg='user.code_public_function_formatter'
+# 2021-12-08 22:59:37    IO CompassControl.refresh_settings: arg=<talon.scripting.types.SettingDecl.NoValueType object at 0x0000000005B7C160>
+# 2021-12-08 22:59:37    IO CompassControl.Mover.refresh_settings: args=('user.code_public_function_formatter', <talon.scripting.types.SettingDecl.NoValueType object at 0x0000000005B7C160>)
+# 2021-12-08 22:59:37    IO refresh_settings: self.settings_map={'continuous_move_frequency_str': 'user.win_move_frequency', 'continuous_resize_frequency_str': 'user.win_resize_frequency', 'continuous_move_rate': 'user.win_continuous_move_rate', 'continuous_resize_rate': 'user.win_continuous_resize_rate', 'verbose_warnings': 'user.win_verbose_warnings'}
+# 2021-12-08 22:59:37    IO refresh_settings: args: args=('user.code_public_variable_formatter', <talon.scripting.types.SettingDecl.NoValueType object at 0x0000000005B7C160>)
+# 2021-12-08 22:59:37    IO CompassControl.refresh_settings: arg='user.code_public_variable_formatter'
+# 2021-12-08 22:59:37    IO CompassControl.refresh_settings: arg=<talon.scripting.types.SettingDecl.NoValueType object at 0x0000000005B7C160>
+# 2021-12-08 22:59:37    IO CompassControl.Mover.refresh_settings: args=('user.code_public_variable_formatter', <talon.scripting.types.SettingDecl.NoValueType object at 0x0000000005B7C160>)
+# 2021-12-08 22:59:37    IO CompassControl.Sizer.refresh_settings: args=('user.code_public_variable_formatter', <talon.scripting.types.SettingDecl.NoValueType object at 0x0000000005B7C160>)
+# 2021-12-08 22:59:37    IO refresh_settings: self.settings_map={'continuous_move_frequency_str': 'user.win_move_frequency', 'continuous_resize_frequency_str': 'user.win_resize_frequency', 'continuous_move_rate': 'user.win_continuous_move_rate', 'continuous_resize_rate': 'user.win_continuous_resize_rate', 'verbose_warnings': 'user.win_verbose_warnings'}
+# 2021-12-08 22:59:37    IO refresh_settings: args: args=('user.code_protected_function_formatter', <talon.scripting.types.SettingDecl.NoValueType object at 0x0000000005B7C160>)
 
 from typing import Any, Callable, Dict, List, Tuple, Optional, Iterator
 
@@ -151,19 +166,6 @@ class CompassControl:
         # if self.testing:
         #     # print(f'refresh_settings: {self.settings_map=}')
         #     print(f'CompassControl.refresh_settings: args: {args=}')
-
-        # WIP - is this a bug, the fact that the settings below seem to be constantly changing (see code.py)?
-        # 2021-12-08 22:59:37    IO CompassControl.refresh_settings: arg='user.code_public_function_formatter'
-        # 2021-12-08 22:59:37    IO CompassControl.refresh_settings: arg=<talon.scripting.types.SettingDecl.NoValueType object at 0x0000000005B7C160>
-        # 2021-12-08 22:59:37    IO CompassControl.Mover.refresh_settings: args=('user.code_public_function_formatter', <talon.scripting.types.SettingDecl.NoValueType object at 0x0000000005B7C160>)
-        # 2021-12-08 22:59:37    IO refresh_settings: self.settings_map={'continuous_move_frequency_str': 'user.win_move_frequency', 'continuous_resize_frequency_str': 'user.win_resize_frequency', 'continuous_move_rate': 'user.win_continuous_move_rate', 'continuous_resize_rate': 'user.win_continuous_resize_rate', 'verbose_warnings': 'user.win_verbose_warnings'}
-        # 2021-12-08 22:59:37    IO refresh_settings: args: args=('user.code_public_variable_formatter', <talon.scripting.types.SettingDecl.NoValueType object at 0x0000000005B7C160>)
-        # 2021-12-08 22:59:37    IO CompassControl.refresh_settings: arg='user.code_public_variable_formatter'
-        # 2021-12-08 22:59:37    IO CompassControl.refresh_settings: arg=<talon.scripting.types.SettingDecl.NoValueType object at 0x0000000005B7C160>
-        # 2021-12-08 22:59:37    IO CompassControl.Mover.refresh_settings: args=('user.code_public_variable_formatter', <talon.scripting.types.SettingDecl.NoValueType object at 0x0000000005B7C160>)
-        # 2021-12-08 22:59:37    IO CompassControl.Sizer.refresh_settings: args=('user.code_public_variable_formatter', <talon.scripting.types.SettingDecl.NoValueType object at 0x0000000005B7C160>)
-        # 2021-12-08 22:59:37    IO refresh_settings: self.settings_map={'continuous_move_frequency_str': 'user.win_move_frequency', 'continuous_resize_frequency_str': 'user.win_resize_frequency', 'continuous_move_rate': 'user.win_continuous_move_rate', 'continuous_resize_rate': 'user.win_continuous_resize_rate', 'verbose_warnings': 'user.win_verbose_warnings'}
-        # 2021-12-08 22:59:37    IO refresh_settings: args: args=('user.code_protected_function_formatter', <talon.scripting.types.SettingDecl.NoValueType object at 0x0000000005B7C160>)
 
         caller_id = 'CompassControl'
         if args:
@@ -912,7 +914,6 @@ class CompassControl:
                 direction = self.compass_control.continuous_direction
                 direction_count = sum(direction.values())
                 if direction_count == 1:    # horizontal or vertical
-                    # if any([resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached]):
                     if (
                         (resize_left_limit_reached and direction['left']) or
                         (resize_up_limit_reached and direction['up']) or
@@ -924,7 +925,6 @@ class CompassControl:
                         self.continuous_width_increment = 0
                         self.continuous_height_increment = 0
                 elif direction_count == 2:    # diagonal
-                    # if any([resize_left_limit_reached, resize_right_limit_reached]):
                     if (
                         (resize_left_limit_reached and direction['left']) or
                         (resize_right_limit_reached and direction['right'])
@@ -933,7 +933,6 @@ class CompassControl:
                             print(f'continuous_helper: horizontal limit reached')
                         self.continuous_width_increment = 0
                     #
-                    # if any([resize_up_limit_reached, resize_down_limit_reached]):
                     if (
                         (resize_up_limit_reached and direction['up']) or
                         (resize_down_limit_reached and direction['down'])
@@ -1009,7 +1008,7 @@ class CompassControl:
                         else:
                             if self.testing:
                                 print(f'continuous_helper: rectangle resize failed. {rect=}')
-                            self.compass_control.continuous_stop()                        
+                            self.compass_control.continuous_stop()
 
             elapsed_time_ms = (time.time_ns() - start_time) / 1e6
             if self.testing:
@@ -1044,7 +1043,7 @@ class CompassControl:
             def _get_new_values(self,
                     rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, delta_width: float, delta_height: float,
                                         direction_in: Direction) -> Tuple[float, float, float, float, bool, bool, bool, bool]:
-                
+
                 result = resize_left_limit_reached = resize_up_limit_reached = resize_right_limit_reached = resize_down_limit_reached = False
 
                 # start with the current values
@@ -1159,30 +1158,13 @@ class CompassControl:
                             # change size this time...nothing to actually do other than flip the toggle
                             self.continuous_alternation = 'size'
 
-    # WIP - move print statements into each method
-                    if self.testing:
-                        print(f'resize_pixels_relative: before left clip: {new_x=}, {new_width=}')
                     new_x, new_width, resize_left_limit_reached = self._clip_left(rect, rect_id, parent_rect, new_x, new_width, direction_in)
-                    if self.testing:
-                        print(f'resize_pixels_relative: after left clip: {new_x=}, {new_width=}')
 
-                    if self.testing:
-                        print(f'resize_pixels_relative: before up clip: {new_y=}, {new_height=}')
                     new_y, new_height, resize_up_limit_reached = self._clip_up(rect, rect_id, parent_rect, new_y, new_height, direction_in)
-                    if self.testing:
-                        print(f'resize_pixels_relative: after up clip: {new_y=}, {new_height=}')
 
-                    if self.testing:
-                        print(f'resize_pixels_relative: before right clip: {new_x=}, {new_width=}')
                     new_x, new_width, resize_right_limit_reached = self._clip_right(rect, rect_id, parent_rect, new_x, new_width, direction_in)
-                    if self.testing:
-                        print(f'resize_pixels_relative: after right clip: {new_x=}, {new_width=}')
 
-                    if self.testing:
-                        print(f'resize_pixels_relative: before down clip: {new_y=}, {new_height=}')
                     new_y, new_height, resize_down_limit_reached = self._clip_down(rect, rect_id, parent_rect, new_y, new_height, direction_in)
-                    if self.testing:
-                        print(f'resize_pixels_relative: after down clip: {new_y=}, {new_height=}')
 
                 if self.testing:
                     #     print(f'move_pixels_relative: {delta_x=}, {delta_y=}, {delta_width=}, {delta_height=}')
@@ -1236,7 +1218,7 @@ class CompassControl:
             # watching expected values to see when they stop changing as requested.
 
             resize_left_limit_reached = resize_up_limit_reached = resize_right_limit_reached = resize_down_limit_reached = False
-            
+
             if self.continuous_width_increment < 0:
                 # if a change was requested and not delivered, i.e. if the requested value is not the same as the old one AND
                 # the requested value is not the same as the new value.
@@ -1255,7 +1237,7 @@ class CompassControl:
                     resize_down_limit_reached = True
                     if self.testing:
                         print(f'resize_pixels_relative: vertical shrink limit reached')
-                        
+
             return resize_left_limit_reached,resize_up_limit_reached,resize_right_limit_reached,resize_down_limit_reached
 
         def resize_absolute(self, rect: ui.Rect, rect_id: int, target_width: float,
@@ -1381,14 +1363,16 @@ class CompassControl:
 
         def _clip_left(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, x: float, width: float, direction: Direction) -> Tuple[int, int, bool]:
             """Adjust rectangle coordinates to keep it from overlapping the left limit of the screen"""
+
+            if self.testing:
+                print(f'_clip_left: before clip: {x=}, {width=}')
+
             resize_left_limit_reached = False
 
             direction_count = sum(direction.values())
 
             # clip to parent rectangle
             if x < parent_rect.x and (direction_count == 0 or direction['left']):
-            
-                # print(f'_clip_left: left clipping')
 
                 # update width before updating new_x
                 width = width - (parent_rect.x - x)
@@ -1399,18 +1383,24 @@ class CompassControl:
                 if self.testing:
                     print(f'_clip_left: {resize_left_limit_reached=}')
 
+            if self.testing:
+                print(f'_clip_left: after clip: {x=}, {width=}')
+
             return round(x), round(width), resize_left_limit_reached
 
         def _clip_up(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, y: float,
                                     height: float, direction: Direction) -> Tuple[int, int, bool]:
             """Adjust rectangle coordinates to keep it from overlapping the upper limit of the screen"""
+
+            if self.testing:
+                print(f'_clip_up: before clip: {y=}, {height=}')
+
             resize_up_limit_reached = False
 
             direction_count = sum(direction.values())
 
             # clip to parent rectangle
             if y < parent_rect.y and (direction_count == 0 or direction['up']):
-                # print(f'_clip_up: up clipping')
 
                 # update height before updating y
                 height = height - (parent_rect.y - y)
@@ -1421,16 +1411,22 @@ class CompassControl:
                 if self.testing:
                     print(f'_clip_up: {resize_up_limit_reached=}')
 
+            if self.testing:
+                print(f'_clip_up: after clip: {y=}, {height=}')
+
             return round(y), round(height), resize_up_limit_reached
 
         def _clip_right(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, x: float,
                                     width: float, direction: Direction) -> Tuple[int, int, bool]:
             """Adjust rectangle coordinates to keep it from overlapping the right limit of the screen"""
+
+            if self.testing:
+                print(f'_clip_right: before clip: {x=}, {width=}')
+
             resize_right_limit_reached = False
 
             direction_count = sum(direction.values())
 
-            # if x + width > parent_rect.x + parent_rect.width and direction['right']:
             if x + width > parent_rect.x + parent_rect.width and (direction_count == 0 or direction['right']):
                 # print(f'_clip_right: right clipping')
 
@@ -1441,25 +1437,32 @@ class CompassControl:
                 if self.testing:
                     print(f'_clip_right: {resize_right_limit_reached=}')
 
+            if self.testing:
+                print(f'_clip_right: after clip: {x=}, {width=}')
+
             return round(x), round(width), resize_right_limit_reached
 
         def _clip_down(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, y: float,
                                     height: float, direction: Direction) -> Tuple[int, int, bool]:
             """Adjust rectangle coordinates to keep it from overlapping the lower limit of the screen"""
+
+            if self.testing:
+                print(f'_clip_down: before clip: {y=}, {height=}')
+
             resize_down_limit_reached = False
 
             direction_count = sum(direction.values())
 
-            # if y + height > parent_rect.y + parent_rect.height and direction['down']:
             if y + height > parent_rect.y + parent_rect.height and (direction_count == 0 or direction['down']):
-                # print(f'_clip_down: down clipping')
-
                 height = parent_rect.y + parent_rect.height - rect.y
 
                 resize_down_limit_reached = True
 
                 if self.testing:
                     print(f'_clip_down: {resize_down_limit_reached=}')
+
+            if self.testing:
+                print(f'_clip_down: after clip: {y=}, {height=}')
 
             return round(y), round(height), resize_down_limit_reached
 
@@ -1625,7 +1628,7 @@ class CompassControl:
             if not result:
                 if self.testing:
                     print(f'snap: move to center failed, {rect=}')
-            
+
         if (rect.width, rect.height) != (parent_rect.width, parent_rect.height):
             # set rectangle size
             result, rect = self.sizer.resize_absolute(rect, rect_id, target_width, target_height, direction)
@@ -1934,7 +1937,7 @@ class CompassControl:
             # translate center coordinates to top left
             target_x = round(center_intercept_x - (rect.width / 2))
             target_y = round(center_intercept_y - (rect.height / 2))
-            
+
             if self.testing:
                 print(f'get_target_point: center to center intercept - {center_intercept_x, center_intercept_y}')
                 print(f'get_target_point: corresponding top left coordinates - {target_x, target_y}')
