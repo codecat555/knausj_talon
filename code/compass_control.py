@@ -14,6 +14,8 @@
 # Continuous move/resize machinery adapted from mouse.py.
 # """
 
+# WIP - compare translate_top_left_by_region() logic between mover and sizer
+
 # TODO
 # -perhaps we shouldn't be using 'win move in'/'win move out' because in a 3D application it would
 # be most natural to use in and out for the z axis... 
@@ -26,6 +28,9 @@
 
 
 # WIP - here are some quirks that need work:
+#
+# - behavior while stretching or shrinking a rectangle which is not fully contained by the parent
+# rectangle is a bit funky...not terrible, I guess...but could be improved.
 #
 # - 'win shrink west' fails when the window is on my left-most screen and is off the left edge of the
 # screen, at the end it of the shrink it jumps to the left edge of the screen to the right. same thing
@@ -392,15 +397,6 @@ class CompassControl:
                         # for move out, we stop after hitting the first limit
                         (direction_count == 4 and self.continuous_width_increment and self.continuous_height_increment)
                     ):
-                # while True:
-                    # if direction_count == 0:
-                    #     # for move in, we only stop after hitting both limits
-                    #     if self.continuous_width_increment == 0 and self.continuous_height_increment == 0:
-                    #         break
-                    # elif direction_count == 4:
-                    #     # for move out, we stop after hitting the first limit
-                    #     if self.continuous_width_increment == 0 or self.continuous_height_increment == 0:
-                    #         break
 
                     if self.testing:
                         print(f'continuous_helper: current top left = {rect.x, rect.y}')
@@ -672,7 +668,7 @@ class CompassControl:
 
             if self.testing:
                 print(f'move_absolute: {rect=}')
-                ctrl.mouse_move(x, y)
+                # ctrl.mouse_move(x, y)
 
             return result, rect
 
@@ -892,6 +888,70 @@ class CompassControl:
 
         def _continuous_helper(self) -> None:
             """This is the engine that handles each continuous iteration"""
+
+            def _check_history_for_max_shrinkage(self, rect: ui.Rect):
+                # shrink is a special case, need to detect when the rectangle has shrunk to a minimum by
+                # watching expected values to see when they stop changing as requested.
+                if self.continuous_width_increment < 0 or self.continuous_height_increment < 0:
+                    # check resize history
+                    value = (rect.width, rect.height)
+                    if len(self.continuous_resize_history) == 2:
+                        if value == self.continuous_resize_history[0] == self.continuous_resize_history[1]:
+                            # window size has stopped changing...so quit trying
+                            if self.testing:
+                                print('_win_resize_continuous_helper: window size has stopped changing, quitting...')
+                            self.compass_control.continuous_stop()
+                        else:
+                            # chuck old data to make room for new data
+                            self.continuous_resize_history.pop(0)
+                    #
+                    # update history
+                    self.continuous_resize_history.append(value)
+
+            def _check_resize_limits(self, resize_left_limit_reached: bool, resize_up_limit_reached: bool, resize_right_limit_reached: bool, resize_down_limit_reached: bool) -> None:
+                direction = self.compass_control.continuous_direction
+                direction_count = sum(direction.values())
+                if direction_count == 1:    # horizontal or vertical
+                    # if any([resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached]):
+                    if (
+                        (resize_left_limit_reached and direction['left']) or
+                        (resize_up_limit_reached and direction['up']) or
+                        (resize_right_limit_reached and direction['right']) or
+                        (resize_down_limit_reached and direction['down'])
+                    ):
+                        if self.testing:
+                            print(f'continuous_helper: single direction limit reached')
+                        self.continuous_width_increment = 0
+                        self.continuous_height_increment = 0
+                elif direction_count == 2:    # diagonal
+                    # if any([resize_left_limit_reached, resize_right_limit_reached]):
+                    if (
+                        (resize_left_limit_reached and direction['left']) or
+                        (resize_right_limit_reached and direction['right'])
+                    ):
+                        if self.testing:
+                            print(f'continuous_helper: horizontal limit reached')
+                        self.continuous_width_increment = 0
+                    #
+                    # if any([resize_up_limit_reached, resize_down_limit_reached]):
+                    if (
+                        (resize_up_limit_reached and direction['up']) or
+                        (resize_down_limit_reached and direction['down'])
+                    ):
+                        if self.testing:
+                            print(f'continuous_helper: vertical limit reached')
+                        self.continuous_height_increment = 0
+                elif direction_count == 0 or direction_count == 4:    # in/out
+                    if all([resize_left_limit_reached, resize_right_limit_reached]):
+                        if self.testing:
+                            print(f'continuous_helper: horizontal limit reached')
+                        self.continuous_width_increment = 0
+
+                    if all([resize_up_limit_reached, resize_down_limit_reached]):
+                        if self.testing:
+                            print(f'continuous_helper: vertical limit reached')
+                        self.continuous_height_increment = 0
+
             start_mutex_wait = time.time_ns()
 
             with self.compass_control.continuous_mutex:
@@ -938,7 +998,7 @@ class CompassControl:
 
                     if result:
                         # the update succeeded, now need to check limits
-                        self._check_resize_limits(resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached)
+                        _check_resize_limits(self, resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached)
                     else: # resize was not completely successful
                         if self.testing:
                             print(f'continuous_helper: resize failed')
@@ -966,69 +1026,6 @@ class CompassControl:
 
             self.compass_control.continuous_iteration += 1
 
-        def _check_history_for_max_shrinkage(self, rect: ui.Rect):
-            # shrink is a special case, need to detect when the rectangle has shrunk to a minimum by
-            # watching expected values to see when they stop changing as requested.
-            if self.continuous_width_increment < 0 or self.continuous_height_increment < 0:
-                # check resize history
-                value = (rect.width, rect.height)
-                if len(self.continuous_resize_history) == 2:
-                    if value == self.continuous_resize_history[0] == self.continuous_resize_history[1]:
-                        # window size has stopped changing...so quit trying
-                        if self.testing:
-                            print('_win_resize_continuous_helper: window size has stopped changing, quitting...')
-                        self.compass_control.continuous_stop()
-                    else:
-                        # chuck old data to make room for new data
-                        self.continuous_resize_history.pop(0)
-                #
-                # update history
-                self.continuous_resize_history.append(value)
-
-        def _check_resize_limits(self, resize_left_limit_reached: bool, resize_up_limit_reached: bool, resize_right_limit_reached: bool, resize_down_limit_reached: bool) -> None:
-            direction = self.compass_control.continuous_direction
-            direction_count = sum(direction.values())
-            if direction_count == 1:    # horizontal or vertical
-                # if any([resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached]):
-                if (
-                    (resize_left_limit_reached and direction['left']) or
-                    (resize_up_limit_reached and direction['up']) or
-                    (resize_right_limit_reached and direction['right']) or
-                    (resize_down_limit_reached and direction['down'])
-                ):
-                    if self.testing:
-                        print(f'continuous_helper: single direction limit reached')
-                    self.continuous_width_increment = 0
-                    self.continuous_height_increment = 0
-            elif direction_count == 2:    # diagonal
-                # if any([resize_left_limit_reached, resize_right_limit_reached]):
-                if (
-                    (resize_left_limit_reached and direction['left']) or
-                    (resize_right_limit_reached and direction['right'])
-                ):
-                    if self.testing:
-                        print(f'continuous_helper: horizontal limit reached')
-                    self.continuous_width_increment = 0
-                #
-                # if any([resize_up_limit_reached, resize_down_limit_reached]):
-                if (
-                    (resize_up_limit_reached and direction['up']) or
-                    (resize_down_limit_reached and direction['down'])
-                ):
-                    if self.testing:
-                        print(f'continuous_helper: vertical limit reached')
-                    self.continuous_height_increment = 0
-            elif direction_count == 0 or direction_count == 4:    # in/out
-                if all([resize_left_limit_reached, resize_right_limit_reached]):
-                    if self.testing:
-                        print(f'continuous_helper: horizontal limit reached')
-                    self.continuous_width_increment = 0
-
-                if all([resize_up_limit_reached, resize_down_limit_reached]):
-                    if self.testing:
-                        print(f'continuous_helper: vertical limit reached')
-                    self.continuous_height_increment = 0
-
         def _continuous_reset(self) -> None:
             """Reset variables used during continuous operations"""
             with self.compass_control.continuous_mutex:
@@ -1043,154 +1040,169 @@ class CompassControl:
                         delta_width: float, delta_height: float, direction_in: Direction
                             ) -> Tuple[bool, ui.Rect, bool, bool, bool, bool]:
             """Change size in given direction as indicated by the given delta values"""
-            start_time = time.time_ns()
 
-            result = resize_left_limit_reached = resize_up_limit_reached = resize_right_limit_reached = resize_down_limit_reached = False
+            def _get_new_values(self,
+                    rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, delta_width: float, delta_height: float,
+                                        direction_in: Direction) -> Tuple[float, float, float, float, bool, bool, bool, bool]:
+                
+                result = resize_left_limit_reached = resize_up_limit_reached = resize_right_limit_reached = resize_down_limit_reached = False
 
-            # start with the current values
-            new_x = rect.x
-            new_y = rect.y
-            width = rect.width
-            height = rect.height
-            new_width = width + delta_width
-            new_height = height + delta_height
+                # start with the current values
+                new_x = rect.x
+                new_y = rect.y
+                width = rect.width
+                height = rect.height
+                new_width = width + delta_width
+                new_height = height + delta_height
 
-            if self.testing:
-                print(f'resize_pixels_relative: starting {rect=}, {delta_width=}, {delta_height=}, {new_width=}, {new_height=}')
+                if self.testing:
+                    print(f'resize_pixels_relative: starting {rect=}, {delta_width=}, {delta_height=}, {new_width=}, {new_height=}')
 
-            # invert directions when shrinking non-uniformly. that is, we are shrinking *toward* the given
-            # direction rather than shrinking away from that direction. note that we continue to use direction_in
-            # for calls to the clipping methods, this is intentional and correct.
-            direction = direction_in.copy()
-            if not all(direction.values()): # => no direction values are set
-                if delta_width < 0:
-                    temp = direction["right"]
-                    direction["right"] = direction["left"]
-                    direction["left"] = temp
-                    # print(f'resize_pixels_relative: swapped left and right')
-                #
-                if delta_height < 0:
-                    temp = direction["up"]
-                    direction["up"] = direction["down"]
-                    direction["down"] = temp
-                    # print(f'resize_pixels_relative: swapped up and down')
+                # invert directions when shrinking non-uniformly. that is, we are shrinking *toward* the given
+                # direction rather than shrinking away from that direction. note that we continue to use direction_in
+                # for calls to the clipping methods, this is intentional and correct.
+                direction = direction_in.copy()
+                if not all(direction.values()): # => no direction values are set
+                    if delta_width < 0:
+                        temp = direction["right"]
+                        direction["right"] = direction["left"]
+                        direction["left"] = temp
+                        # print(f'resize_pixels_relative: swapped left and right')
+                    #
+                    if delta_height < 0:
+                        temp = direction["up"]
+                        direction["up"] = direction["down"]
+                        direction["down"] = temp
+                        # print(f'resize_pixels_relative: swapped up and down')
 
-            # are we moving diagonally?
-            direction_count = sum(direction.values())
+                # are we moving diagonally?
+                direction_count = sum(direction.values())
 
-            if direction_count == 1:    # horizontal or vertical
-                # print(f'resize_pixels_relative: single direction (horizontal or vertical)')
-                # apply changes as indicated
-                if direction["left"]:
-                    new_x = new_x - delta_width
-                    new_x, new_width, resize_left_limit_reached = self._clip_left(rect, rect_id, parent_rect, new_x, new_width, direction_in)
-                #
-                if direction["up"]:
-                    new_y = new_y - delta_height
-                    new_y, new_height, resize_up_limit_reached = self._clip_up(rect, rect_id, parent_rect, new_y, new_height, direction_in)
-                #
-                if direction["right"]:
-                    new_x, new_width, resize_right_limit_reached = self._clip_right(rect, rect_id, parent_rect, new_x, new_width, direction_in)
-                #
-                if direction["down"]:
-                    new_y, new_height, resize_down_limit_reached = self._clip_down(rect, rect_id, parent_rect, new_y, new_height, direction_in)
+                if direction_count == 1:    # horizontal or vertical
+                    # print(f'resize_pixels_relative: single direction (horizontal or vertical)')
+                    # apply changes as indicated
+                    if direction["left"]:
+                        new_x = new_x - delta_width
+                        new_x, new_width, resize_left_limit_reached = self._clip_left(rect, rect_id, parent_rect, new_x, new_width, direction_in)
+                    #
+                    if direction["up"]:
+                        new_y = new_y - delta_height
+                        new_y, new_height, resize_up_limit_reached = self._clip_up(rect, rect_id, parent_rect, new_y, new_height, direction_in)
+                    #
+                    if direction["right"]:
+                        new_x, new_width, resize_right_limit_reached = self._clip_right(rect, rect_id, parent_rect, new_x, new_width, direction_in)
+                    #
+                    if direction["down"]:
+                        new_y, new_height, resize_down_limit_reached = self._clip_down(rect, rect_id, parent_rect, new_y, new_height, direction_in)
 
-            elif direction_count == 2:    # stretch diagonally
-                if direction["left"] and direction["up"]:
-                    # we are stretching northwest so the coordinates must not change for the southeastern corner
-                    new_x = new_x - delta_width
-                    new_y = new_y - delta_height
-
-                    new_x, new_width, resize_left_limit_reached = self._clip_left(rect, rect_id, parent_rect, new_x, new_width, direction_in)
-                    new_y, new_height, resize_up_limit_reached = self._clip_up(rect, rect_id, parent_rect, new_y, new_height, direction_in)
-
-                    #print(f'resize_pixels_relative: left and up')
-
-                elif direction["right"] and direction["up"]:
-                    # we are stretching northeast so the coordinates must not change for the southwestern corner
-
-                    # adjust y to account for the entire change in height
-                    new_y = new_y - delta_height
-
-                    new_x, new_width, resize_right_limit_reached = self._clip_right(rect, rect_id, parent_rect, new_x, new_width, direction_in)
-                    new_y, new_height, resize_up_limit_reached = self._clip_up(rect, rect_id, parent_rect, new_y, new_height, direction_in)
-
-                    #print(f'resize_pixels_relative: right and up')
-
-                elif direction["right"] and direction["down"]:
-                    # we are stretching southeast so the coordinates must not change for the northwestern corner,
-                    # nothing to do here x and y are already set correctly for this case
-                    new_x, new_width, resize_right_limit_reached = self._clip_right(rect, rect_id, parent_rect, new_x, new_width, direction_in)
-                    new_y, new_height, resize_down_limit_reached = self._clip_down(rect, rect_id, parent_rect, new_y, new_height, direction_in)
-
-                    #print(f'resize_pixels_relative: right and down')
-
-                elif direction["left"] and direction["down"]:
-                    # we are stretching southwest so the coordinates must not change for the northeastern corner,
-                    # adjust x to account for the entire change in width
-                    new_x = new_x - delta_width
-
-                    new_x, new_width, resize_left_limit_reached = self._clip_left(rect, rect_id, parent_rect, new_x, new_width, direction_in)
-                    new_y, new_height, resize_down_limit_reached = self._clip_down(rect, rect_id, parent_rect, new_y, new_height, direction_in)
-
-                    #print(f'resize_pixels_relative: left and down')
-
-            elif direction_count == 0 or direction_count == 4:    # stretch to/from center
-                # are delta values are divisible by two?
-                if (delta_width == 0 or abs(delta_width) >= 2) and (delta_height == 0 or abs(delta_height) >= 2):
-                    # normal case, delta values are divisible by two
-                    new_x = new_x - delta_width / 2
-                    new_y = new_y - delta_height / 2
-                else:
-                    if self.testing:
-                        print(f'resize_pixels_relative: delta width and/or height are too small (<2), alternating size and position changes')
-
-                    # alternate changing size and position, since we can only do one or the other when the delta is less than 2
-                    if self.continuous_alternation == 'size':
-                        # change position this time
+                elif direction_count == 2:    # stretch diagonally
+                    if direction["left"] and direction["up"]:
+                        # we are stretching northwest so the coordinates must not change for the southeastern corner
                         new_x = new_x - delta_width
                         new_y = new_y - delta_height
 
-                        # remove delta from the size values
-                        new_width = width
-                        new_height = height
+                        new_x, new_width, resize_left_limit_reached = self._clip_left(rect, rect_id, parent_rect, new_x, new_width, direction_in)
+                        new_y, new_height, resize_up_limit_reached = self._clip_up(rect, rect_id, parent_rect, new_y, new_height, direction_in)
 
-                        self.continuous_alternation = 'position'
+                        #print(f'resize_pixels_relative: left and up')
+
+                    elif direction["right"] and direction["up"]:
+                        # we are stretching northeast so the coordinates must not change for the southwestern corner
+                        # adjust y to account for the entire change in height
+                        new_y = new_y - delta_height
+
+                        new_x, new_width, resize_right_limit_reached = self._clip_right(rect, rect_id, parent_rect, new_x, new_width, direction_in)
+                        new_y, new_height, resize_up_limit_reached = self._clip_up(rect, rect_id, parent_rect, new_y, new_height, direction_in)
+
+                        #print(f'resize_pixels_relative: right and up')
+
+                    elif direction["right"] and direction["down"]:
+                        # we are stretching southeast so the coordinates must not change for the northwestern corner,
+                        # nothing to do here x and y are already set correctly for this case
+                        new_x, new_width, resize_right_limit_reached = self._clip_right(rect, rect_id, parent_rect, new_x, new_width, direction_in)
+                        new_y, new_height, resize_down_limit_reached = self._clip_down(rect, rect_id, parent_rect, new_y, new_height, direction_in)
+
+                        #print(f'resize_pixels_relative: right and down')
+
+                    elif direction["left"] and direction["down"]:
+                        # we are stretching southwest so the coordinates must not change for the northeastern corner,
+                        # adjust x to account for the entire change in width
+                        new_x = new_x - delta_width
+
+                        new_x, new_width, resize_left_limit_reached = self._clip_left(rect, rect_id, parent_rect, new_x, new_width, direction_in)
+                        new_y, new_height, resize_down_limit_reached = self._clip_down(rect, rect_id, parent_rect, new_y, new_height, direction_in)
+
+                        #print(f'resize_pixels_relative: left and down')
+
+                elif direction_count == 0 or direction_count == 4:    # stretch to/from center
+                    # are delta values are divisible by two?
+                    if (delta_width == 0 or abs(delta_width) >= 2) and (delta_height == 0 or abs(delta_height) >= 2):
+                        # normal case, delta values are divisible by two
+                        new_x = new_x - delta_width / 2
+                        new_y = new_y - delta_height / 2
                     else:
-                        # change size this time...nothing to actually do other than flip the toggle
-                        self.continuous_alternation = 'size'
+                        if self.testing:
+                            print(f'resize_pixels_relative: delta width and/or height are too small (<2), alternating size and position changes')
+
+                        # alternate changing size and position, since we can only do one or the other when the delta is less than 2
+                        if self.continuous_alternation == 'size':
+                            # change position this time
+                            new_x = new_x - delta_width
+                            new_y = new_y - delta_height
+
+                            # remove delta from the size values
+                            new_width = width
+                            new_height = height
+
+                            self.continuous_alternation = 'position'
+                        else:
+                            # change size this time...nothing to actually do other than flip the toggle
+                            self.continuous_alternation = 'size'
+
+    # WIP - move print statements into each method
+                    if self.testing:
+                        print(f'resize_pixels_relative: before left clip: {new_x=}, {new_width=}')
+                    new_x, new_width, resize_left_limit_reached = self._clip_left(rect, rect_id, parent_rect, new_x, new_width, direction_in)
+                    if self.testing:
+                        print(f'resize_pixels_relative: after left clip: {new_x=}, {new_width=}')
+
+                    if self.testing:
+                        print(f'resize_pixels_relative: before up clip: {new_y=}, {new_height=}')
+                    new_y, new_height, resize_up_limit_reached = self._clip_up(rect, rect_id, parent_rect, new_y, new_height, direction_in)
+                    if self.testing:
+                        print(f'resize_pixels_relative: after up clip: {new_y=}, {new_height=}')
+
+                    if self.testing:
+                        print(f'resize_pixels_relative: before right clip: {new_x=}, {new_width=}')
+                    new_x, new_width, resize_right_limit_reached = self._clip_right(rect, rect_id, parent_rect, new_x, new_width, direction_in)
+                    if self.testing:
+                        print(f'resize_pixels_relative: after right clip: {new_x=}, {new_width=}')
+
+                    if self.testing:
+                        print(f'resize_pixels_relative: before down clip: {new_y=}, {new_height=}')
+                    new_y, new_height, resize_down_limit_reached = self._clip_down(rect, rect_id, parent_rect, new_y, new_height, direction_in)
+                    if self.testing:
+                        print(f'resize_pixels_relative: after down clip: {new_y=}, {new_height=}')
 
                 if self.testing:
-                    print(f'resize_pixels_relative: before left clip: {new_x=}, {new_width=}')
-                new_x, new_width, resize_left_limit_reached = self._clip_left(rect, rect_id, parent_rect, new_x, new_width, direction_in)
-                if self.testing:
-                    print(f'resize_pixels_relative: after left clip: {new_x=}, {new_width=}')
+                    #     print(f'move_pixels_relative: {delta_x=}, {delta_y=}, {delta_width=}, {delta_height=}')
+                    print(f'resize_pixels_relative: {width=}, {new_width=}, {height=}, {new_height=}')
+                    #
+                return new_x, new_y, new_width, new_height, resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached
 
-                if self.testing:
-                    print(f'resize_pixels_relative: before up clip: {new_y=}, {new_height=}')
-                new_y, new_height, resize_up_limit_reached = self._clip_up(rect, rect_id, parent_rect, new_y, new_height, direction_in)
-                if self.testing:
-                    print(f'resize_pixels_relative: after up clip: {new_y=}, {new_height=}')
+            start_time = time.time_ns()
 
-                if self.testing:
-                    print(f'resize_pixels_relative: before right clip: {new_x=}, {new_width=}')
-                new_x, new_width, resize_right_limit_reached = self._clip_right(rect, rect_id, parent_rect, new_x, new_width, direction_in)
-                if self.testing:
-                    print(f'resize_pixels_relative: after right clip: {new_x=}, {new_width=}')
+            width = rect.width
+            height = rect.height
 
-                if self.testing:
-                    print(f'resize_pixels_relative: before down clip: {new_y=}, {new_height=}')
-                new_y, new_height, resize_down_limit_reached = self._clip_down(rect, rect_id, parent_rect, new_y, new_height, direction_in)
-                if self.testing:
-                    print(f'resize_pixels_relative: after down clip: {new_y=}, {new_height=}')
-
-                #print(f'resize_pixels_relative: from center')
+            new_x, new_y, new_width, new_height, \
+                resize_left_limit_reached, resize_up_limit_reached, \
+                    resize_right_limit_reached, resize_down_limit_reached \
+                        = _get_new_values(self, rect, rect_id, parent_rect, delta_width, delta_height, direction_in)
 
             new_values = (new_x, new_y, new_width, new_height)
 
             if self.testing:
-                #     print(f'move_pixels_relative: {delta_x=}, {delta_y=}, {delta_width=}, {delta_height=}')
-                print(f'resize_pixels_relative: {width=}, {new_width=}, {height=}, {new_height=}')
                 print(f'resize_pixels_relative: setting rect {new_values=}')
 
             result = False
@@ -1283,7 +1295,7 @@ class CompassControl:
 
             if self.testing:
                 print(f'resize_absolute: {rect=}')
-                ctrl.mouse_move(rect.x, rect.y)
+                # ctrl.mouse_move(rect.x, rect.y)
 
             return result, rect
 
@@ -1424,10 +1436,10 @@ class CompassControl:
 
                 width = parent_rect.x + parent_rect.width - rect.x
 
+                resize_right_limit_reached = True
+
                 if self.testing:
                     print(f'_clip_right: {resize_right_limit_reached=}')
-
-                resize_right_limit_reached = True
 
             return round(x), round(width), resize_right_limit_reached
 
