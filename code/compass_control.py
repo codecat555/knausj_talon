@@ -14,14 +14,11 @@
 # Continuous move/resize machinery adapted from mouse.py.
 # """
 
-# WIP - review 'win shrink' automatic stop logic for both cases
-#
-# WIP - does 'direction' need to be passed around inside of continuous methods, since it can always be retrieved via self?
-#
-# WIP - try to shrink a window that's already at at a minimum...the API calls timeout
+# WIP - try to shrink a window that's already at at a minimum...the API calls time out instead of returning some (unambiguous) indication
 
 # TODO
-# -perhaps we shouldn't be using 'win move in'/'win move out' because in a 3D application it would be most natural to use in and out for the z axis... 
+# -perhaps we shouldn't be using 'win move in'/'win move out' because in a 3D application it would
+# be most natural to use in and out for the z axis... 
 # 'win seek'/'win flee'
 # 'win suck'/'win blow'
 # 'win move central'/'win move distal'
@@ -39,11 +36,10 @@
 # - continuous operations are sometimes choppy and randomly stop, due to API timeouts. increasing wait time
 # does not seem to help (this may be more noticeable when debug logging is enabled).
 #
-# - need help with 'win shrink' automatic stop mechanism: resize_history approach fails because
-# calls to set_rect() time out when the window hits the minimum in one dimension, whereas the
-# change checking approach fails because changes will partially fail before the window has
-# reached its minimum size. can repro with 'win shrink' command. see use_resize_history_for_shrink
-# and use_change_check_for_shrink.
+# - need help with 'win shrink' automatic stop mechanisms. both mechanisms are hindered by the API
+# timeouts that happen when the window hits a minimum size. the change checking approach also fails
+# because updates will sometimes partially fail even before the window has reached its minimum size. can
+# repro with 'win shrink' command. see use_resize_history_for_shrink # and use_change_check_for_shrink.
 #
 # - on my Kubuntu 20.10 system, diagonal continuous stretch stops when the first diminension is clipped rather
 # then continuing along the second diminesion until that limit is reached. this is because the visible rect size
@@ -799,7 +795,7 @@ class CompassControl:
             self.continuous_resize_history: List = []
 
             # only one of these should be true at any time
-            self.use_resize_history_for_shrink: bool = True
+            self.use_resize_history_for_shrink: bool = False
             self.use_change_check_for_shrink: bool = not self.use_resize_history_for_shrink
 
             # talon settings for managing continuous move/resize operations
@@ -932,6 +928,9 @@ class CompassControl:
                     result, rect, resize_left_limit_reached, resize_up_limit_reached, \
                                                 resize_right_limit_reached, resize_down_limit_reached = many_values
 
+                    if self.testing:
+                        print(f'continuous_helper: resize returned - {result=}, {rect=}, {resize_left_limit_reached=}, {resize_up_limit_reached=}, {resize_right_limit_reached=}, {resize_down_limit_reached=}')
+
                     # save updated rectangle for next iteration
                     self.compass_control.continuous_rect = rect
 
@@ -939,7 +938,11 @@ class CompassControl:
                         # the update succeeded, now need to check limits
                         self._check_resize_limits(resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached)
                     else: # resize was not completely successful
+                        if self.testing:
+                            print(f'continuous_helper: resize failed')
                         if rect and self.use_resize_history_for_shrink:
+                            if self.testing:
+                                print(f'continuous_helper: checking for max shrinkage...5')
                             self._check_history_for_max_shrinkage(rect)
                         else:
                             if self.testing:
@@ -964,7 +967,7 @@ class CompassControl:
         def _check_history_for_max_shrinkage(self, rect):
             # shrink is a special case, need to detect when the rectangle has shrunk to a minimum by
             # watching expected values to see when they stop changing as requested.
-            if self.continuous_width_increment < 0 and self.continuous_height_increment < 0:
+            if self.continuous_width_increment < 0 or self.continuous_height_increment < 0:
                 # check resize history
                 value = (rect.width, rect.height)
                 if len(self.continuous_resize_history) == 2:
@@ -1217,9 +1220,12 @@ class CompassControl:
         def _check_change_for_max_shrinkage(self, rect, new_x, new_y, new_width, new_height, old_rect):
             # shrink is a special case, need to detect when the rectangle has shrunk to a minimum by
             # watching expected values to see when they stop changing as requested.
+
+            resize_left_limit_reached = resize_up_limit_reached = resize_right_limit_reached = resize_down_limit_reached = False
+            
             if self.continuous_width_increment < 0:
                 # if a change was requested and not delivered, i.e. if the requested value is not the same as the old one AND
-                # the requested value is not the same as the current value.
+                # the requested value is not the same as the new value.
                 if (new_x != old_rect.x and rect.x == old_rect.x) and (new_width != old_rect.width and rect.width == old_rect.width):
                     resize_left_limit_reached = True
                     resize_right_limit_reached = True
@@ -1229,7 +1235,7 @@ class CompassControl:
 
             if self.continuous_height_increment < 0:
                 # if a change was requested and not delivered, i.e. if the requested value is not the same as the old one AND
-                # the requested value is not the same as the current value.
+                # the requested value is not the same as the new value.
                 if (new_y != old_rect.y and rect.y == old_rect.y) and (new_height != old_rect.height and rect.height == old_rect.height):
                     resize_up_limit_reached = True
                     resize_down_limit_reached = True
