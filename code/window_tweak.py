@@ -268,6 +268,7 @@ class WinCompassControl:
                     if testing:
                         print('_win_set_rect: retrying after time out...')
                     retries -= 1
+                    continue
                 else:
                     if testing:
                         print('_win_set_rect: no more retries, failed')
@@ -283,14 +284,30 @@ class WinCompassControl:
                 position_matches_request = (rect_in.x, rect_in.y) == (w.rect.x, w.rect.y)
                 size_matches_request = (rect_in.width, rect_in.height) == (w.rect.width, w.rect.height)
                 if not position_matches_request or not size_matches_request:
-                    # need to pass rect_id and old_rect here so they can be saved for 'win revert' usage
-                    raise compass_control.RectUpdateError(rect_id=rect_id, initial=old_rect, requested=rect_in, actual=w.rect)
+                    if app.platform == 'linux':
+                        if testing:
+                            print('_win_set_rect: linux - timed out waiting for window update.')
 
-                result = True, w.rect
+                        if retries > 0:
+                            if testing:
+                                print('_win_set_rect: linux - retrying after time out...')
+                            retries -= 1
+                            continue
+                        else:
+                            if testing:
+                                print('_win_set_rect: linux - no more retries, failed')
 
-                # done with retry loop
-                break
+                            # no more retries
+                            break
+                    else:
+                        # need to pass rect_id and old_rect here so they can be saved for 'win revert' usage
+                        raise compass_control.RectUpdateError(rect_id=rect_id, initial=old_rect, requested=rect_in, actual=w.rect)
 
+                else:
+                    result = True, w.rect
+
+                    # done with retry loop
+                    break
             finally:
                 ui.unregister('win_move',   on_move)
                 ui.unregister('win_resize', on_resize)
