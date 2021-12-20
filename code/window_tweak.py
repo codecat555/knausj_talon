@@ -92,7 +92,7 @@ setting_verbose_warnings = mod.setting(
     type=bool,
     default=False,
     # window move and resize requests are not guaranteed
-    desc="Whether to generate a warning when the result of a window move or resize request does not exactly match the request.",
+    desc="Whether to generate warnings for anomalous events.",
 )
 
 @imgui.open(y=0)
