@@ -17,6 +17,7 @@
 # TODO
 # -perhaps we shouldn't be using 'win move in'/'win move out' because, for 3D, it would
 # be most natural to use in and out for the z axis...
+# 'win park'/'win fly'
 # 'win seek'/'win flee'
 # 'win suck'/'win blow'
 # 'win here'/'win there'
@@ -28,8 +29,22 @@
 
 # WIP - here are some quirks that need work:
 #
-# - behavior while stretching or shrinking a rectangle which is not fully contained by the parent
-# rectangle is a bit funky...not terrible, I guess...but could be improved.
+# # - need help with 'win shrink' automatic stop mechanisms. both mechanisms I've implemented are hindered
+# by the API timeouts that happen when the window hits a minimum size. the 'change checking' approach also
+# fails because rect assignment will sometimes partially fail even before the window has reached its
+# minimum size. can repro with 'win shrink' command. see use_resize_history_for_shrink and
+# use_change_check_for_shrink.
+#
+# - on my Kubuntu 20.10 system, diagonal continuous stretch stops when the first diminension is clipped rather
+# then continuing along the second diminesion until that limit is reached. this is because the visible rect size
+# is the same as the physical rect size even though they are not really the same. this feature started working as
+# expected after I enabled auto-hide for the 'taskbar'.
+#
+# Kubuntu 20.10: 'win stretch' stops at first limit and at other times, because set_rect()
+# result does not match request. seems to happen randomly...maybe not, it just happened
+# again at about the same place.
+#
+# Kubuntu 20.10: move in/out is noticeably slower than other operations
 #
 # - 'win shrink west' fails when the window is on my left-most screen and is off the left edge of the
 # screen, at the end it of the shrink it jumps to the left edge of the screen to the right. same thing
@@ -39,16 +54,8 @@
 # increasing the queue time out doesn't seem to help (this may be more noticeable when debug logging
 # is enabled).
 #
-# - need help with 'win shrink' automatic stop mechanisms. both mechanisms I've implemented are hindered
-# by the API timeouts that happen when the window hits a minimum size. the 'change checking' approach also
-# fails because rect assignment will sometimes partially fail even before the window has reached its
-# minimum size. can repro with 'win shrink' command. see use_resize_history_for_shrink and
-# use_change_check_for_shrink.
-#
-# - on my Kubuntu 20.10 system, diagonal continuous stretch stops when the first diminension is clipped rather
-# then continuing along the second diminesion until that limit is reached. this is because the visible rect size
-# is the same as the physical rect size even though they are not really the same. Tried auto-hiding the 'taskbar',
-# no difference.
+# - behavior while stretching or shrinking a rectangle which is not fully contained by the parent
+# rectangle is a bit funky...not terrible, I guess...but could be improved.
 #
 # - is this a bug, the fact that the settings below seem to be constantly changing? see 'settings register' below
 # and code.py.
@@ -1205,7 +1212,7 @@ class CompassControl:
 
                 if not result and self.use_change_check_for_shrink:
                     resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached = \
-                                                    self._check_change_for_max_shrinkage(rect, new_x, new_y, new_width, new_height, old_rect)
+                                                self._check_change_for_max_shrinkage(rect, new_x, new_y, new_width, new_height, old_rect)
 
             elapsed_time_ms = (time.time_ns() - start_time) / 1e6
             if self.testing:
