@@ -23,7 +23,7 @@ from talon import ui, Module, Context, actions, imgui, settings, app
 from .compass_control import CompassControl, Direction, compass_direction
 
 # # turn debug messages on and off
-testing: bool = True
+testing: bool = False
 
 win_compass_control = None
 compass_control = None
@@ -284,7 +284,7 @@ class WinCompassControl:
                 position_matches_request = (rect_in.x, rect_in.y) == (w.rect.x, w.rect.y)
                 size_matches_request = (rect_in.width, rect_in.height) == (w.rect.width, w.rect.height)
                 if not position_matches_request or not size_matches_request:
-                    if app.platform == 'linux':
+                    if False and app.platform == 'linux':
                         if testing:
                             print('_win_set_rect: linux - timed out waiting for window update.')
 
