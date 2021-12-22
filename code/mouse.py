@@ -365,11 +365,6 @@ ui.register("win_focus", win_event_handler)
 def mouse_scroll(amount):
     def scroll():
         global scroll_amount
-#        if (scroll_amount >= 0) == (amount >= 0):
-#            scroll_amount += amount
-#        else:
-#            scroll_amount = amount
-#        #print('HERE 0')
         if continuous_scoll_mode:
             if (scroll_amount >= 0) == (amount >= 0):
                 scroll_amount += amount
