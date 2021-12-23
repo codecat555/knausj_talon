@@ -23,7 +23,7 @@ from talon import ui, Module, Context, actions, imgui, settings, app
 from .compass_control import CompassControl, Direction, compass_direction
 
 # # turn debug messages on and off
-testing: bool = False
+testing: bool = True
 
 win_compass_control = None
 compass_control = None
@@ -226,11 +226,11 @@ class WinCompassControl:
         while retries >= 0:
             event_count = 0
             if (rect_in.x, rect_in.y) != (w.rect.x, w.rect.y):
-                print(f'_win_set_rect: register win_move')
+                # print(f'_win_set_rect: register win_move')
                 ui.register('win_move', on_move)
                 event_count += 1
             if (rect_in.width, rect_in.height) != (w.rect.width, w.rect.height):
-                print(f'_win_set_rect: register win_resize')
+                # print(f'_win_set_rect: register win_resize')
                 ui.register('win_resize', on_resize)
                 event_count += 1
             if event_count == 0:
@@ -239,7 +239,7 @@ class WinCompassControl:
                 # fall through to this block. so, the result we return is based on whether this is
                 # our first time through the loop or not.
                 success = retries < max_retries
-                    
+
                 # no real work to do
                 result = success, rect_in
 
@@ -250,7 +250,7 @@ class WinCompassControl:
 
             # do it to it
             start_time_rect = time.time_ns()
-            w.rect = rect_in
+            w.rect = rect_in.copy()
             try:
                 # for testing
                 #raise queue.Empty()
