@@ -134,7 +134,7 @@ def _win_show_gui(gui: imgui.GUI) -> None:
     gui.text(f"Position: {ctrl.mouse_pos()}")
 
     gui.line()
-    
+
     screen = w.screen
     gui.text(f"== Screen ==")
     gui.spacer()

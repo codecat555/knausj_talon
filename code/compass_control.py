@@ -703,11 +703,11 @@ class CompassControl:
         def resize_to_pointer(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, region: Direction) -> Tuple[bool, ui.Rect]:
             x, y = ctrl.mouse_pos()
             return self.move_absolute(rect, rect_id, x, y, region)
-        
+
         def translate_top_left_by_region(self, rect: ui.Rect, rect_id: int,
                             target_x: float, target_y: float, region_in: Direction) -> Tuple[int, int]:
             """This code figures out what the top left coordinates should be for moving in the given direction"""
-            
+
             width = rect.width
             height = rect.height
 
@@ -1249,10 +1249,7 @@ class CompassControl:
             if self.testing:
                 print(f'resize_to_pointer: mouse position - {mouse_x, mouse_y}')
 
-            # this depends on knowledge of compass_control internals...that 'center'
-            # is 0000, i.e. all directions False. could modify compass_control to provide
-            # an interface for this use case.
-            direction = compass_direction(['center'])
+            direction = compass_direction([])
             delta_width = 0
             if nd_direction['horizontal'] or nd_direction['diagonal']:
                 if mouse_x >= rect.x and mouse_x <= rect.x + rect.width:
@@ -1273,7 +1270,7 @@ class CompassControl:
                         # WIP - why are the parentheses required below?
                         delta_width = mouse_x - (rect.x + rect.width)
                         direction['right'] = True
-            
+
             delta_height = 0
             if nd_direction['vertical'] or nd_direction['diagonal']:
                 if mouse_y >= rect.y and mouse_y <= rect.y + rect.height:
@@ -1297,7 +1294,7 @@ class CompassControl:
 
             if self.testing:
                 print(f'resize_to_pointer: {delta_width=}, {delta_height=}, {direction=}')
-            
+
             return self.resize_pixels_relative(rect, rect_id, parent_rect, delta_width, delta_height, direction)
 
         def _check_change_for_max_shrinkage(self, rect: ui.Rect, new_x: float, new_y: float, new_width: float, new_height: float, old_rect: ui.Rect):
@@ -1729,7 +1726,7 @@ class CompassControl:
 
         if self.testing:
             print(f'snap: after resize - {old_rect=}')
-            
+
         # remember old rectangle, for 'revert'
         self._save_last_rect(rect_id, old_rect)
 
