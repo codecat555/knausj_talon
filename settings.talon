@@ -64,10 +64,10 @@ settings():
 
     # The update frequency used when resizing a window continuously
     # note: setting this value too low may result in 
-    user.win_resize_frequency = "40ms"
+    user.win_resize_frequency = "60ms"
 
     # The target speed, in cm/sec, for continuous resize operations
-    user.win_continuous_resize_rate = 4.0
+    user.win_continuous_resize_rate = 4.5
 
     # When enabled, the 'Move/Resize Window' GUI will not be shown for continuous resize operations
     user.win_hide_resize_gui = 0
@@ -79,7 +79,7 @@ settings():
     user.win_set_retries = 1
 
     # Whether to generate warnings for anomalous events.
-    user.win_verbose_warnings = 1
+    user.win_verbose_warnings = 0
 
 # uncomment tag to enable mouse grid
 # tag(): user.mouse_grid_enabled
