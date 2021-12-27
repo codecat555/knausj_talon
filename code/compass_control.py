@@ -700,6 +700,10 @@ class CompassControl:
 
             return result, rect
 
+        def resize_to_pointer(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, region: Direction) -> Tuple[bool, ui.Rect]:
+            x, y = ctrl.mouse_pos()
+            return self.move_absolute(rect, rect_id, x, y, region)
+        
         def translate_top_left_by_region(self, rect: ui.Rect, rect_id: int,
                             target_x: float, target_y: float, region_in: Direction) -> Tuple[int, int]:
             """This code figures out what the top left coordinates should be for moving in the given direction"""
@@ -1236,6 +1240,65 @@ class CompassControl:
                 print(f'resize_pixels_relative: done ({elapsed_time_ms} ms)')
 
             return result, rect, resize_left_limit_reached, resize_up_limit_reached, resize_right_limit_reached, resize_down_limit_reached
+
+        def resize_to_pointer(self, rect: ui.Rect, rect_id: int, parent_rect: ui.Rect, nd_direction: non_dual_direction) -> Tuple[bool, ui.Rect, bool, bool, bool, bool]:
+            if self.testing:
+                print(f'resize_to_pointer: starting - {rect=}, {nd_direction=}')
+
+            mouse_x, mouse_y = ctrl.mouse_pos()
+            if self.testing:
+                print(f'resize_to_pointer: mouse position - {mouse_x, mouse_y}')
+
+            # this depends on knowledge of compass_control internals...that 'center'
+            # is 0000, i.e. all directions False. could modify compass_control to provide
+            # an interface for this use case.
+            direction = compass_direction(['center'])
+            delta_width = 0
+            if nd_direction['horizontal'] or nd_direction['diagonal']:
+                if mouse_x >= rect.x and mouse_x <= rect.x + rect.width:
+                    # we are shrinking
+                    if mouse_x < rect.center.x:
+                        delta_width = rect.x - mouse_x
+                        direction['right'] = True
+                    elif mouse_x > rect.center.x:
+                        # WIP - why are the parentheses required below?
+                        delta_width = mouse_x - (rect.x + rect.width)
+                        direction['left'] = True
+                else:
+                    # we are stretching
+                    if mouse_x < rect.x:
+                        delta_width = rect.x - mouse_x
+                        direction['left'] = True
+                    else:
+                        # WIP - why are the parentheses required below?
+                        delta_width = mouse_x - (rect.x + rect.width)
+                        direction['right'] = True
+            
+            delta_height = 0
+            if nd_direction['vertical'] or nd_direction['diagonal']:
+                if mouse_y >= rect.y and mouse_y <= rect.y + rect.height:
+                    # we are shrinking
+                    if mouse_y < rect.center.y:
+                        delta_height = rect.y - mouse_y
+                        direction['down'] = True
+                    elif mouse_y > rect.center.y:
+                        # WIP - why are the parentheses required below?
+                        delta_height = mouse_y - (rect.y + rect.height)
+                        direction['up'] = True
+                else:
+                    # we are stretching
+                    if mouse_y < rect.y:
+                        delta_height = rect.y - mouse_y
+                        direction['up'] = True
+                    else:
+                        # WIP - why are the parentheses required below?
+                        delta_height = mouse_y - (rect.y + rect.height)
+                        direction['down'] = True
+
+            if self.testing:
+                print(f'resize_to_pointer: {delta_width=}, {delta_height=}, {direction=}')
+            
+            return self.resize_pixels_relative(rect, rect_id, parent_rect, delta_width, delta_height, direction)
 
         def _check_change_for_max_shrinkage(self, rect: ui.Rect, new_x: float, new_y: float, new_width: float, new_height: float, old_rect: ui.Rect):
             # shrink is a special case, need to detect when the rectangle has shrunk to a minimum by
