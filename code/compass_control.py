@@ -115,6 +115,25 @@ def compass_direction(m: List) -> Direction:
 
     return result
 
+# a type for representing "non-dual" directions
+NonDualDirection = Dict[str, bool]
+
+# mod.list("non_dual_direction", desc="Horizontal, vertical or diagonal")
+# ctx.lists["user.non_dual_direction"] = [ 'horizontal', 'flat', 'vertical', 'sharp', 'diagonal', 'slant' ]
+@mod.capture(rule="horizontal | flat | vertical | sharp | diagonal | slant")
+def non_dual_direction(m: List) -> NonDualDirection:
+    """
+    Matches on a basic compass direction to return which keys should
+    be pressed.
+    """
+    result = {
+        "horizontal": "horizontal" in m or "flat" in m,
+        "vertical": "vertical" in m or "sharp" in m,
+        "diagonal": "diagonal" in m or "slant" in m,
+    }
+
+    return result
+
 class CompassControl:
 
     def __init__(self, continuous_tag_name: str, set_method: Callable, stop_method: Callable, settings_map: Dict, testing: bool):
@@ -683,10 +702,8 @@ class CompassControl:
 
         def translate_top_left_by_region(self, rect: ui.Rect, rect_id: int,
                             target_x: float, target_y: float, region_in: Direction) -> Tuple[int, int]:
-            """
-            Move rectangle in given direction to match the given values. Note: this method is used by move_absolute(),
-            which interprets the Direction argument differently than elsewhere in this module.
-            """
+            """This code figures out what the top left coordinates should be for moving in the given direction"""
+            
             width = rect.width
             height = rect.height
 
@@ -1290,7 +1307,7 @@ class CompassControl:
 
         def translate_top_left_by_region(self, rect: ui.Rect, rect_id: int,
                         target_width: float, target_height: float, direction: Direction) -> Tuple[int, int]:
-            """This could figures out what the top left coordinates should be for resizing in the given direction"""
+            """This code figures out what the top left coordinates should be for resizing in the given direction"""
 
             x = rect.x
             y = rect.y

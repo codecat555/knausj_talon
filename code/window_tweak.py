@@ -17,10 +17,10 @@ import queue
 import logging
 import time
 
-from talon import ui, Module, Context, actions, imgui, settings, app
+from talon import ui, Module, Context, actions, imgui, settings, app, ctrl
 
 # globals
-from .compass_control import CompassControl, Direction, compass_direction
+from .compass_control import CompassControl, Direction, compass_direction, NonDualDirection, non_dual_direction
 
 # # turn debug messages on and off
 testing: bool = True
@@ -129,6 +129,12 @@ def _win_show_gui(gui: imgui.GUI) -> None:
 
     gui.line()
 
+    gui.text(f"== Mouse ==")
+
+    gui.text(f"Position: {ctrl.mouse_pos()}")
+
+    gui.line()
+    
     screen = w.screen
     gui.text(f"== Screen ==")
     gui.spacer()
@@ -396,6 +402,15 @@ class Actions:
 
         compass_control.mover.move_absolute(w.rect, w.id, x, y, region)
 
+    def win_move_to_pointer(region: Optional[NonDualDirection] = non_dual_direction(['north', 'west'])):
+        "Move window to pointer position, centered on the point indicated by the given region"
+
+        w = ui.active_window()
+
+        x, y = ctrl.mouse_pos()
+        
+        compass_control.mover.move_absolute(w.rect, w.id, x, y, region)
+        
     def win_stretch(direction: Optional[Direction] = None) -> None:
         "Stretch window in small increments until stopped, optionally in the given direction"
 
@@ -429,6 +444,72 @@ class Actions:
         w = ui.active_window()
 
         compass_control.sizer.resize_absolute(w.rect, w.id, target_width, target_height, region)
+
+    def win_resize_to_pointer(nd_direction: NonDualDirection) -> None:
+        "Stretch or shrink window to pointer position, centered on the point indicated by the given region"
+
+        w = ui.active_window()
+
+        rect = w.rect
+        rect_id = w.id
+        parent_rect = w.screen.visible_rect
+
+        if testing:
+            print(f'win_resize_to_pointer: starting - {rect=}, {nd_direction=}')
+
+        mouse_x, mouse_y = ctrl.mouse_pos()
+        if testing:
+            print(f'win_resize_to_pointer: mouse position - {mouse_x, mouse_y}')
+
+        # WIP - move internals to compass_control
+        # WIP - this depends on our knowledge of compass_control internals...that 'center' is 0000, i.e. all directions False
+        direction = compass_direction(['center'])
+        delta_width = 0
+        if nd_direction['horizontal'] or nd_direction['diagonal']:
+            if mouse_x >= rect.x and mouse_x <= rect.x + rect.width:
+                # we are shrinking
+                if mouse_x < rect.center.x:
+                    delta_width = rect.x - mouse_x
+                    direction['right'] = True
+                elif mouse_x > rect.center.x:
+                    # WIP - why are the parentheses required below?
+                    delta_width = mouse_x - (rect.x + rect.width)
+                    direction['left'] = True
+            else:
+                # we are stretching
+                if mouse_x < rect.x:
+                    delta_width = rect.x - mouse_x
+                    direction['left'] = True
+                else:
+                    # WIP - why are the parentheses required below?
+                    delta_width = mouse_x - (rect.x + rect.width)
+                    direction['right'] = True
+        
+        delta_height = 0
+        if nd_direction['vertical'] or nd_direction['diagonal']:
+            if mouse_y >= rect.y and mouse_y <= rect.y + rect.height:
+                # we are shrinking
+                if mouse_y < rect.center.y:
+                    delta_height = rect.y - mouse_y
+                    direction['down'] = True
+                elif mouse_y > rect.center.y:
+                    # WIP - why are the parentheses required below?
+                    delta_height = mouse_y - (rect.y + rect.height)
+                    direction['up'] = True
+            else:
+                # we are stretching
+                if mouse_y < rect.y:
+                    delta_height = rect.y - mouse_y
+                    direction['up'] = True
+                else:
+                    # WIP - why are the parentheses required below?
+                    delta_height = mouse_y - (rect.y + rect.height)
+                    direction['down'] = True
+
+        if testing:
+            print(f'win_resize_to_pointer: {delta_width=}, {delta_height=}, {direction=}')
+        
+        return compass_control.sizer.resize_pixels_relative(w.rect, w.id, w.screen.visible_rect, delta_width, delta_height, direction)
 
     def win_move_pixels(distance: int, direction: Optional[Direction] = None) -> None:
         "Move window some number of pixels"

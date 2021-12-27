@@ -42,6 +42,15 @@ win move <number_signed> at <number_signed>$:
 win move <user.compass_direction> <number_signed> at <number_signed>$:
     user.win_move_absolute(number_signed_1, number_signed_2, compass_direction)
 
+# move the current window to the position indicated by the mouse pointer
+win move to pointer$:
+    user.win_move_to_pointer()
+
+# move the current window so that the point indicated by the given direction
+# is positioned at the mouse pointer coordinates.
+win move <user.compass_direction> to pointer$:
+    user.win_move_to_pointer(compass_direction)
+            
 # increase both the size and width of the current window simultaneously
 win stretch$:
     user.win_stretch()
@@ -101,6 +110,11 @@ win size <number> by <number>$:
 # change window size by stretching or shrinking in the given direction
 win size <user.compass_direction> <number> by <number>$:
     user.win_resize_absolute(number_1, number_2, compass_direction)
+
+# stretch or shrink the current window to match the position indicated by the mouse pointer
+# non_dual_direction is 'horizontal' or 'flat', 'vertical' or 'sharp', 'diagonal' or 'slant'
+win size <user.non_dual_direction> to pointer$:
+    user.win_resize_to_pointer(non_dual_direction)
 
 # restore current window's last remembered size and position
 win revert$:
