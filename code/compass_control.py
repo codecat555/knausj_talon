@@ -1796,7 +1796,7 @@ class CompassControl:
             new_y = (((1 - ratio_of_differences) * rect_center.y) + (ratio_of_differences * parent_center.y))
 
             if self.testing:
-                print(f"_get_component_dimensions: {diagonal_length=}, {new_x=}, {new_y=}")
+                print(f"get_component_dimensions: {diagonal_length=}, {new_x=}, {new_y=}")
 
             delta_width = abs(new_x - rect_center.x) * horizontal_multiplier
             delta_height = abs(new_y - rect_center.y) * vertical_multiplier
@@ -1805,12 +1805,12 @@ class CompassControl:
                 x_steps = 0
                 if delta_width != 0:
                     x_steps = rect.width/delta_width
-                print(f"_get_component_dimensions: x steps={x_steps}")
+                print(f"get_component_dimensions: x steps={x_steps}")
 
                 y_steps = 0
                 if delta_height != 0:
                     y_steps = rect.height/delta_height
-                print(f"_get_component_dimensions: y steps={y_steps}")
+                print(f"get_component_dimensions: y steps={y_steps}")
         else:
             if direction_count == 1:    # horizontal or vertical
                 if direction["left"] or direction["right"]:
@@ -1824,7 +1824,7 @@ class CompassControl:
                 delta_height = rect.height * ratio
 
         if self.testing:
-            print(f"_get_component_dimensions: returning {delta_width}, {delta_height}")
+            print(f"get_component_dimensions: returning {delta_width}, {delta_height}")
 
         return round(delta_width), round(delta_height)
 

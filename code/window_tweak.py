@@ -267,17 +267,14 @@ class WinCompassControl:
                     q.get(timeout=queue_timeout)
 
             except queue.Empty:
-                if testing:
-                    print('_win_set_rect: timed out waiting for window update.')
+                print('_win_set_rect: timed out waiting for window update.')
 
                 if retries > 0:
-                    if testing:
-                        print('_win_set_rect: retrying after time out...')
+                    print('_win_set_rect: retrying after time out...')
                     retries -= 1
                     continue
                 else:
-                    if testing:
-                        print('_win_set_rect: no more retries, failed')
+                    print('_win_set_rect: no more retries, failed')
 
                     # no more retries
                     break
@@ -291,17 +288,14 @@ class WinCompassControl:
                 size_matches_request = (rect_in.width, rect_in.height) == (w.rect.width, w.rect.height)
                 if not position_matches_request or not size_matches_request:
                     if False and app.platform == 'linux':
-                        if testing:
-                            print('_win_set_rect: linux - timed out waiting for window update.')
+                        print('_win_set_rect: linux - timed out waiting for window update.')
 
                         if retries > 0:
-                            if testing:
-                                print('_win_set_rect: linux - retrying after time out...')
+                            print('_win_set_rect: linux - retrying after time out...')
                             retries -= 1
                             continue
                         else:
-                            if testing:
-                                print('_win_set_rect: linux - no more retries, failed')
+                            print('_win_set_rect: linux - no more retries, failed')
 
                             # no more retries
                             break
