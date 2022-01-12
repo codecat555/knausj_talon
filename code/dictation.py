@@ -41,7 +41,11 @@ def text(m) -> str:
     """A sequence of words, including user-defined vocabulary."""
     return format_phrase(m)
 
-@mod.capture(rule="({user.vocabulary} | {user.punctuation} | {user.prose_snippets} | <phrase> | {user.prose_modifiers})+")
+# see https://talonvoice.slack.com/archives/C7ERD5Q5T/p1641502405012400
+# "Sentence my brief application spell air bat cap is numb ten" => My app abc is 10
+#text_rule = "({self.vocabulary} | <user.abbreviation> | <user.spell> | <user.number_prefix> | {self.key_punctuation} | <phrase>)+"
+text_rule="({user.vocabulary} | {user.punctuation} | {user.prose_snippets} | <phrase> | {user.prose_modifiers})+"
+@mod.capture(rule=text_rule)
 def prose(m) -> str:
     """Mixed words and punctuation, auto-spaced & capitalized."""
     # Straighten curly quotes that were introduced to obtain proper spacing.
