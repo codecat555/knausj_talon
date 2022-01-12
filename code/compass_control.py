@@ -209,8 +209,7 @@ class CompassControl:
             if hasattr(caller, local_name):
                 caller.__setattr__(local_name, talon_setting.get())
 
-                if caller.testing:
-                    print(f'{caller_id}._update_all_settings: received updated value for {talon_setting.path}: {getattr(caller, local_name, None)}')
+                print(f'{caller_id}._update_all_settings: received updated value for {talon_setting.path}: {getattr(caller, local_name, None)}')
 
     @classmethod
     def _update_setting(cls, caller, caller_id: str, args):
@@ -224,8 +223,7 @@ class CompassControl:
         else:
             caller.__setattr__(local_name, args[1])
 
-            if caller.testing:
-                print(f'{caller_id}._update_setting: received updated value for {talon_name}: {getattr(caller, local_name, None)}')
+            print(f'{caller_id}._update_setting: received updated value for {talon_name}: {getattr(caller, local_name, None)}')
 
     # error thrown when a move or resize request is not completely successful
     class RectUpdateError(Exception):
