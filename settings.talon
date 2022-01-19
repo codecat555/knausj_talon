@@ -73,13 +73,13 @@ settings():
     user.win_hide_resize_gui = 0
 
     # How long to wait (in seconds) for talon to signal completion of window move/resize requests
-    user.win_set_queue_timeout = 0.2
+    user.win_set_queue_timeout = 0.8
 
     # How many times to retry a timed out talon window move/resize request
     user.win_set_retries = 1
 
     # Whether to generate warnings for anomalous events.
-    user.win_verbose_warnings = 0
+    user.win_verbose_warnings = 1
 
 # uncomment tag to enable mouse grid
 # tag(): user.mouse_grid_enabled

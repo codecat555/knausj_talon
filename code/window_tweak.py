@@ -16,14 +16,15 @@ from typing import Optional, Tuple
 import queue
 import logging
 import time
+import threading
 
-from talon import ui, Module, Context, actions, imgui, settings, app, ctrl
+from talon import ui, Module, Context, actions, imgui, settings, app, ctrl, cron, events
 
 # globals
 from .compass_control import CompassControl, Direction, compass_direction, NonDualDirection, non_dual_direction
 
 # # turn debug messages on and off
-testing: bool = False
+testing: bool = True
 
 win_compass_control = None
 compass_control = None
@@ -190,6 +191,155 @@ def _win_show_gui(gui: imgui.GUI) -> None:
         _win_show_gui.hide()
 
 class WinCompassControl:
+    def __init__(self):
+        self.testing = testing
+        self.win_move_test1_job = None
+        self.win_move_test1_direction = None
+        self.win_move_test1_iteration = None
+        self.win_move_test1_prior_result = None
+        self.win_move_test1_target_window = None
+        
+    @classmethod
+    def confirmation_wait(cls, w: ui.Window) -> Tuple[bool, ui.Rect]:
+        import ctypes
+        import ctypes.wintypes
+        import win32con
+
+        user32 = ctypes.windll.user32
+        ole32 = ctypes.windll.ole32
+
+        ole32.CoInitialize(0)
+
+        WinEventProcType = ctypes.WINFUNCTYPE(
+            None, 
+            ctypes.wintypes.HANDLE,
+            ctypes.wintypes.DWORD,
+            ctypes.wintypes.HWND,
+            ctypes.wintypes.LONG,
+            ctypes.wintypes.LONG,
+            ctypes.wintypes.DWORD,
+            ctypes.wintypes.DWORD
+        )
+
+        result = False
+        def callback(hWinEventHook, event, hwnd, idObject, idChild, dwEventThread, dwmsEventTime):
+            length = user32.GetWindowTextLengthA(hwnd)
+            print(f'confirmation_wait: {length=}')
+            buff = ctypes.create_string_buffer(length + 1)
+            print(f'confirmation_wait: HERE 1')
+            user32.GetWindowTextA(hwnd, buff, length + 1)
+            print(f'confirmation_wait: HERE 2')
+            # print(buff.value)
+            print(f'confirmation_wait: in callback - {buff.value}')
+            # nonlocal result
+            # result = True
+            # win32gui.PostThreadMessage(threading.get_native_id(), win32con.WM_MOVE, 0, 0)
+
+        WinEventProc = WinEventProcType(callback)
+
+        user32.SetWinEventHook.restype = ctypes.wintypes.HANDLE
+        hook = user32.SetWinEventHook(
+            # win32con.EVENT_OBJECT_LOCATIONCHANGE,
+            # win32con.EVENT_OBJECT_LOCATIONCHANGE,
+            # win32con.WM_MOVE,
+            # win32con.WM_MOVE,
+            win32con.EVENT_MIN,
+            win32con.EVENT_MAX,
+            0,
+            WinEventProc,
+            0,
+            # w.app.pid,
+            0,
+            win32con.WINEVENT_OUTOFCONTEXT
+        )
+        if hook == 0:
+            print('confirmation_wait: SetWinEventHook failed')
+            return
+
+        # timeout = settings.get('user.win_set_queue_timeout')
+        timeout = 1.0
+        sleepy_time = timeout / 100
+        timeout_ns = timeout * 1E9
+        start_time = time.monotonic_ns()
+        msg = ctypes.wintypes.MSG()
+        while time.monotonic_ns() - start_time < timeout_ns:
+            # if user32.GetMessageW(ctypes.byref(msg), 0, 0, 0) != 0:
+            # if user32.PeekMessageW(ctypes.byref(msg), 0, 0, 0, win32con.PM_REMOVE) != 0:
+            #     user32.TranslateMessageW(msg)
+            #     user32.DispatchMessageW(msg)
+            if result:
+                break
+            time.sleep(sleepy_time)
+        elapsed_time_ms = (time.monotonic_ns() - start_time) / 1e6
+        if testing:
+            print(f'confirmation_wait: done ({elapsed_time_ms} ms)')
+
+        user32.UnhookWinEvent(hook)
+        ole32.CoUninitialize()
+
+        return result
+
+    @classmethod
+    def win_set_rect_win32(cls, w: ui.Window, rect_in: ui.Rect) -> Tuple[bool, ui.Rect]:
+        import win32gui
+        import win32con
+
+        old_rect: ui.Rect = w.rect
+        rect_id: int = w.id
+
+        # calculate offsets
+        delta_left = rect_in.x - old_rect.x
+        delta_top = rect_in.y - old_rect.y
+        delta_right = rect_in.x + rect_in.width - (old_rect.x + old_rect.width)
+        delta_bottom = rect_in.y + rect_in.height - (old_rect.y + old_rect.height)
+        print(f'_win_set_rect: {delta_left=}, {delta_top=}, {delta_right=}, {delta_bottom=}')
+
+        # fetch window state information
+        tup = win32gui.GetWindowPlacement(rect_id)
+        (flags, showCmd, minpos, maxpos, normalpos) = tup
+        #  GetWindowPlacement - (0, 1, (-1, -1), (-1, -1), (3076, 447, 4047, 1255))
+        print(f'_win_set_rect: GetWindowPlacement BEFORE - {tup}')
+        
+        # set window
+        WPF_ASYNCWINDOWPLACEMENT = 0x0004
+        flags = WPF_ASYNCWINDOWPLACEMENT
+        showCmd = win32con.SWP_NOACTIVATE | win32con.SWP_NOZORDER
+        new_rect = normalpos[0] + delta_left, normalpos[1] + delta_top, normalpos[2] + delta_right, normalpos[3] + delta_bottom
+        window_placement = flags, showCmd, minpos, maxpos, new_rect
+        result = win32gui.SetWindowPlacement(rect_id, window_placement)
+        print(f'_win_set_rect: SetWindowPlacement - {result=}')
+
+        result = False
+        result_rect = None
+        if not WinCompassControl.confirmation_wait(w):
+            ## fetch window state information
+            # tup = win32gui.GetWindowPlacement(rect_id)
+            # result_rect = tup[4]
+            # result = new_rect == result_rect
+            print(f'_win_set_rect: confirmation wait failed')
+
+        result = w.rect == rect_in
+        print(f'_win_set_rect: returning - {result, w.rect=}')
+            
+        # just return rect_in for now
+        return result, w.rect
+    
+    @classmethod
+    def win_set_rect_win32(cls, old_rect: ui.Rect, rect_id: int, rect_in: ui.Rect) -> Tuple[bool, ui.Rect]:
+        print('_win_set_rect: trying win32 api...')
+ 
+        # get window ref
+        windows = ui.windows()
+        for w in windows:
+            if w.id == rect_id:
+                break
+        else:
+            if settings.get('user.win_verbose_warnings') != 0:
+                logging.warning(f'_win_set_rect: invalid window id "{rect_id}"')
+            return False, old_rect
+
+        return WinCompassControl.win_set_rect_win32(w, rect_in)
+
     @classmethod
     def win_set_rect(cls, old_rect: ui.Rect, rect_id: int, rect_in: ui.Rect) -> Tuple[bool, ui.Rect]:
         """Callback invoked by CompassControl engine for updating the window rect using talon API"""
@@ -214,7 +364,7 @@ class WinCompassControl:
                 if testing:
                     print(f'_win_set_rect: win size changed')
 
-        # get window handle
+        # get window ref
         windows = ui.windows()
         for w in windows:
             if w.id == rect_id:
@@ -276,6 +426,10 @@ class WinCompassControl:
                 else:
                     print('_win_set_rect: no more retries, failed')
 
+                    if False:
+                        print('_win_set_rect: trying win32 api...')
+                        WinCompassControl.win_set_rect_win32(old_rect, rect_id, rect_in)
+
                     # no more retries
                     break
             else:
@@ -321,6 +475,59 @@ class WinCompassControl:
     def win_stop(self) -> None:
         """Callback invoked by CompassControl engine after stopping a continuous operation"""
         win_stop_gui.hide()
+
+    def win_move_test1_stop(self) -> bool:
+        if self.win_move_test1_job:
+            cron.cancel(self.win_move_test1_job)
+            self.win_move_test1_job = None
+        
+    def win_move_test1_start(self, target_title: Optional[str] = None) -> bool:
+        "Continuously move test window in a loop, to catch timeout errors"
+
+        if not self.win_move_test1_job:
+            if not target_title:
+                logging.error(f'win_move_test1: target_title not set')
+                return False
+                
+            # get window handle
+            windows = ui.windows()
+            for w in windows:
+                if w.title == target_title:
+                    break
+            else:
+                logging.error(f'win_move_test1: failed to find test window "{target_title}"')
+                return False
+            self.win_move_test1_target_window = w
+
+            self.win_move_test1_iteration = 0
+
+            self.win_move_test1_direction = compass_direction([])
+            
+            self.win_move_test1_job = cron.interval('500ms', self.win_move_test1_start)
+            if self.testing:
+                print(f'win_move_test1: starting - {self.win_move_test1_job=}')
+        else:
+            if self.testing:
+                print(f'win_move_test1: iterating')
+
+            if self.win_move_test1_iteration % 2 == 0:
+                # reverse direction
+                if self.win_move_test1_direction['up']:
+                    self.win_move_test1_direction['up'] = False
+                    self.win_move_test1_direction['down'] = True
+                else:
+                    self.win_move_test1_direction['up'] = True
+                    self.win_move_test1_direction['down'] = False
+
+            result, rect, horizontal_limit_reached, vertical_limit_reached = actions.user.win_move_pixels(10, self.win_move_test1_direction, self.win_move_test1_target_window)
+
+            if result != self.win_move_test1_prior_result:
+                # error state changed
+                # events.write('window_tweak', f'win_move_test1: STATE CHANGED - {result=}')
+                print(f'win_move_test1: STATE CHANGED - {result=}')
+            self.win_move_test1_prior_result = result
+
+            self.win_move_test1_iteration += 1
 
 def on_ready():
     """Callback invoked by Talon, where we populate our global objects"""
@@ -444,13 +651,14 @@ class Actions:
 
         compass_control.sizer.resize_to_pointer(w.rect, w.id, w.screen.visible_rect, nd_direction)
 
-    def win_move_pixels(distance: int, direction: Optional[Direction] = None) -> None:
+    def win_move_pixels(distance: int, direction: Optional[Direction] = None, w: Optional[ui.Window] = None) -> None:
         "Move window some number of pixels"
 
         if not direction:
             direction = compass_direction(['center'])
 
-        w = ui.active_window()
+        if not w:
+            w = ui.active_window()
 
         delta_width, delta_height = compass_control.get_component_dimensions(w.rect, w.id, w.screen.visible_rect, distance, direction, 'move')
 
@@ -511,6 +719,14 @@ class Actions:
 
         w = ui.active_window()
         compass_control.revert(w.rect, w.id)
+        
+    def win_move_test1_start() -> None:
+        "Continuously move test window in a loop, to catch timeout errors"
+        win_compass_control.win_move_test1_start('Untitled - Notepad')
+
+    def win_move_test1_stop() -> None:
+        "Stop move test 1"
+        win_compass_control.win_move_test1_stop()
 
     def win_test_bresenham(num: int) -> None:
         "Test modified bresenham algo"

@@ -119,3 +119,9 @@ win size <user.non_dual_direction> to pointer$:
 # restore current window's last remembered size and position
 win revert$:
     user.win_revert()
+
+win start move test one:
+    user.win_move_test1_start()
+
+win stop move test one:
+    user.win_move_test1_stop()
