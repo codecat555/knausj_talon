@@ -193,11 +193,12 @@ def _win_show_gui(gui: imgui.GUI) -> None:
 class WinCompassControl:
     def __init__(self):
         self.testing = testing
-        self.win_move_test1_job = None
-        self.win_move_test1_direction = None
-        self.win_move_test1_iteration = None
-        self.win_move_test1_prior_result = None
-        self.win_move_test1_target_window = None
+        self.win_move_test_job = None
+        self.win_move_test_direction = None
+        self.win_move_test_iteration = None
+        self.win_move_test_prior_result = None
+        self.win_move_test_target_window1 = None
+        self.win_move_test_target_window2 = None
         
     @classmethod
     def confirmation_wait(cls, w: ui.Window) -> Tuple[bool, ui.Rect]:
@@ -476,15 +477,14 @@ class WinCompassControl:
         """Callback invoked by CompassControl engine after stopping a continuous operation"""
         win_stop_gui.hide()
 
-    def win_move_test1_stop(self) -> bool:
-        if self.win_move_test1_job:
-            cron.cancel(self.win_move_test1_job)
-            self.win_move_test1_job = None
-        
+    # @classmethod
+    # def win_move_test1_watcher(cls, event_win: ui.Window) -> None:
+    #     print(f'win_move_test1_watcher: window changed - {event_win=}')
+
     def win_move_test1_start(self, target_title: Optional[str] = None) -> bool:
         "Continuously move test window in a loop, to catch timeout errors"
 
-        if not self.win_move_test1_job:
+        if not self.win_move_test_job:
             if not target_title:
                 logging.error(f'win_move_test1: target_title not set')
                 return False
@@ -492,42 +492,65 @@ class WinCompassControl:
             # get window handle
             windows = ui.windows()
             for w in windows:
-                if w.title == target_title:
+                # if w.title == target_title:
+                if w.title == 'junk1.txt - Notepad':
+                    self.win_move_test_target_window1 = w
+                elif w.title == 'junk2.txt - Notepad':
+                    self.win_move_test_target_window2 = w
+
+                if self.win_move_test_target_window1 and self.win_move_test_target_window2:
                     break
             else:
-                logging.error(f'win_move_test1: failed to find test window "{target_title}"')
+                logging.error(f'win_move_test1: failed to find two windows with title "{target_title}"')
+                self.win_move_test_stop()
                 return False
-            self.win_move_test1_target_window = w
 
-            self.win_move_test1_iteration = 0
+            # # register watcher
+            # ui.register('win_move', WinCompassControl.win_move_test1_watcher)
+            # ui.register('win_resize', WinCompassControl.win_move_test1_watcher)
 
-            self.win_move_test1_direction = compass_direction([])
+            self.win_move_test_iteration = 0
+
+            self.win_move_test_direction = compass_direction([])
             
-            self.win_move_test1_job = cron.interval('500ms', self.win_move_test1_start)
+            self.win_move_test_job = cron.interval('10000ms', self.win_move_test1_start)
             if self.testing:
-                print(f'win_move_test1: starting - {self.win_move_test1_job=}')
+                print(f'win_move_test1: starting - {self.win_move_test_job=}')
         else:
             if self.testing:
                 print(f'win_move_test1: iterating')
 
-            if self.win_move_test1_iteration % 2 == 0:
+            if self.win_move_test_iteration % 2 == 0:
                 # reverse direction
-                if self.win_move_test1_direction['up']:
-                    self.win_move_test1_direction['up'] = False
-                    self.win_move_test1_direction['down'] = True
+                if self.win_move_test_direction['up']:
+                    self.win_move_test_direction['up'] = False
+                    self.win_move_test_direction['down'] = True
                 else:
-                    self.win_move_test1_direction['up'] = True
-                    self.win_move_test1_direction['down'] = False
+                    self.win_move_test_direction['up'] = True
+                    self.win_move_test_direction['down'] = False
 
-            result, rect, horizontal_limit_reached, vertical_limit_reached = actions.user.win_move_pixels(10, self.win_move_test1_direction, self.win_move_test1_target_window)
+            result, rect, horizontal_limit_reached, vertical_limit_reached = actions.user.win_move_pixels(10, self.win_move_test_direction, self.win_move_test_target_window1)
 
-            if result != self.win_move_test1_prior_result:
+            if result != self.win_move_test_prior_result:
                 # error state changed
                 # events.write('window_tweak', f'win_move_test1: STATE CHANGED - {result=}')
                 print(f'win_move_test1: STATE CHANGED - {result=}')
-            self.win_move_test1_prior_result = result
+            self.win_move_test_prior_result = result
 
-            self.win_move_test1_iteration += 1
+            if not result:
+                alt_result = actions.user.win_move_pixels(10, self.win_move_test_direction, self.win_move_test_target_window2)
+                print(f'win_move_test1: alternate window move returned {alt_result=}')
+            
+            self.win_move_test_iteration += 1
+
+    def win_move_test_stop(self) -> bool:
+        if self.win_move_test_job:
+            cron.cancel(self.win_move_test_job)
+            self.win_move_test_job = None
+
+        # # unregister watcher
+        # ui.unregister('win_move', WinCompassControl.win_move_test1_watcher)
+        # ui.unregister('win_resize', WinCompassControl.win_move_test1_watcher)
 
 def on_ready():
     """Callback invoked by Talon, where we populate our global objects"""
@@ -726,7 +749,7 @@ class Actions:
 
     def win_move_test1_stop() -> None:
         "Stop move test 1"
-        win_compass_control.win_move_test1_stop()
+        win_compass_control.win_move_test_stop()
 
     def win_test_bresenham(num: int) -> None:
         "Test modified bresenham algo"
