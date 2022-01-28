@@ -81,6 +81,8 @@ settings():
     # Whether to generate warnings for anomalous events.
     user.win_verbose_warnings = 0
 
+    imgui.dark_mode = 1
+
 # uncomment tag to enable mouse grid
 # tag(): user.mouse_grid_enabled
 
