@@ -38,7 +38,7 @@ additional word:
     sleep(250ms)
     user.vscode("workbench.action.quickOpen")
     sleep(200ms)
-    insert("additional_words")
+    insert("additional_words.csv")
     sleep(300ms)
     key(enter)
     sleep(200ms)
@@ -54,12 +54,10 @@ additional brief:
     sleep(250ms)
     user.vscode("workbench.action.quickOpen")
     sleep(200ms)
-    insert("code/abbreviate")
+    insert("code/abbreviate.py")
     sleep(300ms)
     key(enter)
     sleep(200ms)
-    edit.file_end()
-    edit.line_insert_down()
     
 additional phone:
     user.switcher_focus("Code")
