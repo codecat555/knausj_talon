@@ -29,7 +29,11 @@
 
 # WIP - here are some quirks that need work:
 #
-# # - need help with 'win shrink' automatic stop mechanisms. both mechanisms I've implemented are hindered
+# - continuous operations are sometimes choppy and randomly stop, due to API delay and timeouts.
+# increasing the queue time out doesn't seem to help (this may be more noticeable when debug logging
+# is enabled). see https://github.com/talonvoice/talon/issues/470
+#
+# - timeout issues with 'win shrink' automatic stop mechanisms. both mechanisms I've implemented are hindered
 # by the API timeouts that happen when the window hits a minimum size. the 'change checking' approach also
 # fails because rect assignment will sometimes partially fail even before the window has reached its
 # minimum size. can repro with 'win shrink' command. see use_resize_history_for_shrink and
@@ -50,9 +54,6 @@
 # screen, at the end it of the shrink it jumps to the left edge of the screen to the right. same thing
 # swapping west for east, left for right, etc.
 #
-# - continuous operations are sometimes choppy and randomly stop, due to API delay and timeouts.
-# increasing the queue time out doesn't seem to help (this may be more noticeable when debug logging
-# is enabled).
 #
 # - behavior while stretching or shrinking a rectangle which is not fully contained by the parent
 # rectangle is a bit funky...not terrible, I guess...but could be improved.
