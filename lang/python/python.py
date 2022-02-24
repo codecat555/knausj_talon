@@ -230,6 +230,9 @@ class UserActions:
         actions.edit.left()
         actions.edit.left()
 
+    def code_protected_function(text: str):
+        actions.user.code_private_function(text)
+
     def code_public_function(text: str):
         result = "def {}():".format(
             actions.user.formatted_text(
