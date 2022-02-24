@@ -135,9 +135,11 @@ punctuation_words = {
     "back tick": "`",
     "grave": "`",
     "comma": ",",
+    "drip": ",",
     "period": ".",
     "full stop": ".",
     "semicolon": ";",
+    "half drip": ";",
     "colon": ":",
     "forward slash": "/",
     "question mark": "?",
@@ -241,7 +243,8 @@ alternate_keys = {
     "page down": "pagedown",
     "tabby": "tab",
     "clap": "enter",
-    "gap": "space",
+    # gap conflicts with cap
+    # "gap": "space",
 }
 # mac apparently doesn't have the menu key.
 if app.platform in ("windows", "linux"):
