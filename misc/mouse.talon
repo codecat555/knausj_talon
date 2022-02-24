@@ -1,4 +1,4 @@
-control mouse: user.mouse_toggle_control_mouse()
+(control mouse| mouse control): user.mouse_toggle_control_mouse()
 zoom mouse: user.mouse_toggle_zoom_mouse()
 camera overlay: user.mouse_toggle_camera_overlay()
 run calibration: user.mouse_calibrate()	
@@ -85,12 +85,12 @@ wheel upper: user.mouse_scroll_up_continuous()
 wheel upper here:
     user.mouse_move_center_active_window()
     user.mouse_scroll_up_continuous()
-(wheel gaze|gazerbeam): user.mouse_gaze_scroll()
-(wheel gaze|gazerbeam) here:
+gazerbeam: user.mouse_gaze_scroll()
+gazerbeam here:
     user.mouse_move_center_active_window()
     user.mouse_gaze_scroll()
-(wheel stop|gazeout): user.mouse_scroll_stop()
-(wheel stop|gazeout) here:
+(wheel stop|gaze off|gaze out|gazeout): user.mouse_scroll_stop()
+(wheel stop|gaze off|gaze out|gazeout) here:
     user.mouse_move_center_active_window()
     user.mouse_scroll_stop()
 wheel left: user.mouse_scroll_left()
