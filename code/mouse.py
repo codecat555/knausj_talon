@@ -2,6 +2,7 @@ import os
 
 from talon import (
     Module,
+    Context,
     actions,
     app,
     clip,
@@ -53,11 +54,13 @@ hidden_cursor = os.path.join(
 )
 
 mod = Module()
+ctx = Context()
 mod.tag("suspend_scroll", desc="Suspend continuous scrolling when this tag becomes active and resume when it is inactivated.")
 mod.list(
     "mouse_button", desc="List of mouse button words to mouse_click index parameter"
 )
 mod.tag("my_mouse_debug", desc="a tag to flag control mouse events in log")
+mod.tag("eyemouse_enhancements", desc="a tag to enable control mouse enhancements")
 
 mod.tag(
     "mouse_cursor_commands_enable", desc="Tag enables hide/show mouse cursor commands"
@@ -158,6 +161,13 @@ class Actions:
     def mouse_toggle_control_mouse():
         """Toggles control mouse"""
         toggle_control(not config.control_mouse)
+        if eye_mouse.tracker is not None:
+            if config.control_mouse:
+                ctx.tags = [ 'user.eyemouse_enhancements' ]
+            else:
+                ctx.tags = []
+        else:
+            print(f'mouse_toggle_control_mouse: no tracker found!')
 
     def mouse_toggle_camera_overlay():
         """Toggles camera overlay"""
@@ -260,9 +270,13 @@ class Actions:
 
         # enable 'control mouse' if eye tracker is present and not enabled already
         global control_mouse_forced
-        if eye_mouse.tracker is not None and not config.control_mouse:
-            toggle_control(True)
-            control_mouse_forced = True
+        if eye_mouse.tracker is not None:
+            ctx.tags = [ 'user.eyemouse_enhancements' ]
+            if not config.control_mouse:
+                toggle_control(True)
+                control_mouse_forced = True
+        else:
+            print(f'mouse_gaze_scroll: no tracker found!')
 
     def copy_mouse_position():
         """Copy the current mouse position coordinates"""
@@ -438,6 +452,9 @@ def stop_scroll():
     if control_mouse_forced and config.control_mouse:
         toggle_control(False)
         control_mouse_forced = False
+        
+    if not config.control_mouse:
+        ctx.tags = []
 
     scroll_job = None
     gaze_job = None
