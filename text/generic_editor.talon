@@ -10,10 +10,10 @@ go word left:
 go word right:
     edit.word_right()
 
-go left:
+(go left|pull):
     edit.left()
 
-go right:
+(go right|push):
     edit.right()
 
 go up:
