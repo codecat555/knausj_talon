@@ -23,7 +23,7 @@ from talon import ui, Module, Context, actions, imgui, settings, app, ctrl
 from .compass_control import CompassControl, Direction, compass_direction, NonDualDirection, non_dual_direction
 
 # # turn debug messages on and off
-testing: bool = False
+testing: bool = True
 
 win_compass_control = None
 compass_control = None
@@ -97,7 +97,7 @@ setting_verbose_warnings = mod.setting(
 
 @imgui.open(y=0)
 def win_stop_gui(gui: imgui.GUI) -> None:
-    gui.text(f"Say 'win stop' or click below.")
+    gui.text(f"Say 'window stop' or click below.")
     gui.line()
     if gui.button("Stop moving/resizing"):
         actions.user.win_stop()
@@ -182,7 +182,7 @@ def _win_show_gui(gui: imgui.GUI) -> None:
 
     gui.line()
 
-    gui.text(f"Say 'win hide' to close this window.")
+    gui.text(f"Say 'window traits hide' to close this window.")
 
     gui.line()
 
@@ -267,14 +267,17 @@ class WinCompassControl:
                     q.get(timeout=queue_timeout)
 
             except queue.Empty:
-                print('_win_set_rect: timed out waiting for window update.')
+                if testing:
+                    print('_win_set_rect: timed out waiting for window update.')
 
                 if retries > 0:
-                    print('_win_set_rect: retrying after time out...')
+                    if testing:
+                        print('_win_set_rect: retrying after time out...')
                     retries -= 1
                     continue
                 else:
-                    print('_win_set_rect: no more retries, failed')
+                    if testing:
+                        print('_win_set_rect: no more retries, failed')
 
                     # no more retries
                     break
@@ -288,14 +291,17 @@ class WinCompassControl:
                 size_matches_request = (rect_in.width, rect_in.height) == (w.rect.width, w.rect.height)
                 if not position_matches_request or not size_matches_request:
                     if False and app.platform == 'linux':
-                        print('_win_set_rect: linux - timed out waiting for window update.')
+                        if testing:
+                            print('_win_set_rect: linux - timed out waiting for window update.')
 
                         if retries > 0:
-                            print('_win_set_rect: linux - retrying after time out...')
+                            if testing:
+                                print('_win_set_rect: linux - retrying after time out...')
                             retries -= 1
                             continue
                         else:
-                            print('_win_set_rect: linux - no more retries, failed')
+                            if testing:
+                                print('_win_set_rect: linux - no more retries, failed')
 
                             # no more retries
                             break
