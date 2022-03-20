@@ -107,6 +107,10 @@ class UserActions:
             actions.user.file_manager_hide_pickers()
             path = ""
 
+        # print(f'file_manager_current_path: {path=}')
+        # import traceback
+        # traceback.print_stack()
+        
         return path
 
     def file_manager_terminal_here():
