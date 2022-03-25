@@ -1,8 +1,8 @@
 import logging
 from typing import Dict, Sequence
 
-from talon import Context, Module, actions, app, ui
-from .user_settings import get_list_from_csv, SETTINGS_DIR
+from talon import Context, Module, actions
+from .user_settings import get_list_from_csv
 
 mod = Module()
 ctx = Context()
@@ -170,35 +170,6 @@ assert rep.replace_string('this is a tricky one') == 'stopping early a tricky on
 
 phrase_replacer = PhraseReplacer(phrases_to_replace)
 
-def _open_settings_file(file_name: str) -> None:
-    path = SETTINGS_DIR / (file_name + '.csv')
-    print(f'_open_settings_file: {path=}')
-    if app.platform == "windows":
-        import os
-        os.startfile(path)
-        actions.sleep("200ms")
-        actions.key("ctrl-end")
-        actions.sleep("200ms")
-        actions.key("enter")
-    elif app.platform == "mac":
-        # import subprocess
-        # subprocess.Popen(['open', path])
-        ui.launch(path='open', args=(path))
-        actions.sleep("200ms")
-        actions.key("cmd-down")
-        actions.sleep("200ms")
-        actions.key("enter")
-    elif app.platform == "linux":
-        # import subprocess
-        # subprocess.Popen(['/usr/bin/xdg-open', path])
-        ui.launch(path='/usr/bin/xdg-open', args=(path))
-        actions.sleep("200ms")
-        actions.key("ctrl-end")
-        actions.sleep("200ms")
-        actions.key("enter")
-    else:
-        raise Exception(f'unknown system: {app.platform}')
-        
 @mod.action_class
 class Actions:
     def replace_phrases(words: Sequence[str]) -> Sequence[str]:
@@ -209,8 +180,3 @@ class Actions:
             # fall back to dictate.replace_words for error-robustness
             logging.error("phrase replacer failed!")
             return actions.dictate.replace_words(words)
-
-    def talon_additional_word():
-        """Opens the additional_words list in an editor"""
-        _open_settings_file('additional_words')
-
