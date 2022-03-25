@@ -30,20 +30,22 @@ slap: edit.line_insert_down()
 
 # from pokey - update additional_words.csv using vscode.
 additional word:
-    user.switcher_focus("Code")
-    user.vscode("workbench.action.openRecent")
-    sleep(50ms)
-    insert("talon-user")
-    key(enter)
-    sleep(250ms)
-    user.vscode("workbench.action.quickOpen")
-    sleep(200ms)
-    insert("additional_words.csv")
-    sleep(300ms)
-    key(enter)
-    sleep(200ms)
-    edit.file_end()
-    edit.line_insert_down()
+    user.talon_additional_word()
+    # user.switcher_focus("Code")
+    # user.vscode("workbench.action.openRecent")
+    # sleep(50ms)
+    # insert("talon-user")
+    # key(enter)
+    # sleep(250ms)
+    # user.vscode("workbench.action.quickOpen")
+    # sleep(200ms)
+    # insert("additional_words.csv")
+    # sleep(300ms)
+    # key(enter)
+    # sleep(200ms)
+    # edit.file_end()
+    # edit.line_insert_down()
+
 
 additional brief:
     user.switcher_focus("Code")
@@ -60,7 +62,7 @@ additional brief:
     sleep(200ms)
     
 additional phone:
-    user.switcher_focus("Code")
+    user.open_talon_user_workspace()
     user.vscode("workbench.action.openRecent")
     sleep(50ms)
     insert("knausj_talon")

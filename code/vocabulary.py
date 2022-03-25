@@ -1,8 +1,9 @@
 import logging
+import os
 from typing import Dict, Sequence
 
 from talon import Context, Module, actions
-from .user_settings import get_list_from_csv
+from .user_settings import get_list_from_csv, SETTINGS_DIR
 
 mod = Module()
 ctx = Context()
@@ -180,3 +181,7 @@ class Actions:
             # fall back to dictate.replace_words for error-robustness
             logging.error("phrase replacer failed!")
             return actions.dictate.replace_words(words)
+
+    def talon_additional_word():
+        """Opens the additional_words list in an editor"""
+        os.startfile(SETTINGS_DIR / 'additional_words.csv')
