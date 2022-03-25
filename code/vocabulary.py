@@ -183,7 +183,7 @@ def _open_settings_file(file_name: str) -> None:
     elif app.platform == "mac":
         # import subprocess
         # subprocess.Popen(['open', path])
-        ui.launch(path='open', args=path)
+        ui.launch(path='open', args=(path))
         actions.sleep("200ms")
         actions.key("cmd-down")
         actions.sleep("200ms")
@@ -191,7 +191,7 @@ def _open_settings_file(file_name: str) -> None:
     elif app.platform == "linux":
         # import subprocess
         # subprocess.Popen(['/usr/bin/xdg-open', path])
-        ui.launch(path='/usr/bin/xdg-open', args=path)
+        ui.launch(path='/usr/bin/xdg-open', args=(path))
         actions.sleep("200ms")
         actions.key("ctrl-end")
         actions.sleep("200ms")
