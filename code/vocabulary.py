@@ -1,5 +1,5 @@
 import logging
-import os
+import subprocess
 from typing import Dict, Sequence
 
 from talon import Context, Module, actions
@@ -184,4 +184,4 @@ class Actions:
 
     def talon_additional_word():
         """Opens the additional_words list in an editor"""
-        os.startfile(SETTINGS_DIR / 'additional_words.csv')
+        subprocess.Popen(str(SETTINGS_DIR / 'additional_words.csv'), shell=True)
