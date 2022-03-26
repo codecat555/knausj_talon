@@ -1,11 +1,13 @@
 # XXX - would be nice to be able pipe these through formatters
 
+from .user_settings import get_list_from_csv
+
 from talon import Context, Module
 
 mod = Module()
 mod.list("abbreviation", desc="Common abbreviation")
 
-abbreviations = {
+_abbreviation_defaults = {
     "address": "addr",
     "administrator": "admin",
     "administrators": "admins",
@@ -67,7 +69,6 @@ abbreviations = {
     "direction": "dir",
     "directory": "dir",
     "distribution": "dist",
-    "doctor": "Dr.",
     "document": "doc",
     "documents": "docs",
     "double": "dbl",
@@ -215,5 +216,11 @@ abbreviations = {
     "window": "win",
 }
 
+abbreviations = get_list_from_csv(
+    "abbreviate.csv",
+    headers=("Abbreviation", "Word(s)"),
+    default=_abbreviation_defaults
+)
+
 ctx = Context()
-ctx.lists["user.abbreviation"] = abbreviations
+ctx.lists["self.file_extension"] = abbreviations
