@@ -56,7 +56,14 @@ def _move_to_screen(
         screen_number or offset and not (screen_number and offset)
     ), "Provide exactly one of `screen_number` or `offset`."
 
-    src_screen = window.screen
+    # try to catch the 'disappearing window' bug (talon.ui.UIErr: window not found)
+    try:
+        src_screen = window.screen
+    except Exception as e:
+        result = user.talon_get_active_context()
+        print(f'_move_to_screen: no window to snap!')
+        print(e)
+        print(result)
 
     if offset:
         if offset < 0:
@@ -65,6 +72,9 @@ def _move_to_screen(
             dest_screen = actions.user.screens_get_next(src_screen)
     else:
         dest_screen = actions.user.screens_get_by_number(screen_number)
+
+    print(f'_move_to_screen: BEFORE - {src_screen.name=}, {dest_screen.name=}, {window.rect}')
+    print('_move_to_screen: BEFORE -\n' + '\n'.join([f'{s.name}: {s}' for s in ui.screens()]))
 
     if src_screen == dest_screen:
         return
@@ -118,6 +128,19 @@ def _move_to_screen(
         height = window.rect.height * proportional_height
     _set_window_pos(window, x=x, y=y, width=width, height=height)
 
+    print(f'_move_to_screen: AFTER - {window.screen.name}, {window.rect}')
+    print('_move_to_screen: AFTER -\n' + '\n'.join([f'{s.name}: {s}' for s in ui.screens()]))
+    if src_screen.name != dest_screen.name and window.screen.name == src_screen.name:
+        import win32gui
+        win32gui.MoveWindow(
+            window.id,
+            round(x),
+            round(y),
+            round(width),
+            round(height),
+            False
+        )
+        print(f'_move_to_screen: win32gui result - {window.screen.name}, {window.rect}')
 
 def _snap_window_helper(window, pos):
     screen = window.screen.visible_rect
