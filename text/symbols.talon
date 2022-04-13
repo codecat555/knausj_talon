@@ -29,40 +29,41 @@ empty escaped string:
     "\\'\\'"
     key(left)
     key(left)
-(inside parens | args):
+(inside parens | args) | round pair:
 	insert("()")
 	key(left)
-inside (squares | square brackets | list):
+inside (squares | square brackets | list) | square pair:
 	insert("[]")
 	key(left)
-inside (bracket | braces):
+inside (bracket | braces ) | curly pair:
 	insert("{}")
 	key(left)
 inside percent:
 	insert("%%")
 	key(left)
-inside (quotes | string):
+inside (quotes | string ) | string pair:
 	insert("''")
 	key(left)
-inside (double quotes | dubquotes):
+inside (double quotes | dubquotes ) | dub pair:
     insert('""')
 	key(left)
 inside (graves | back ticks):
 	insert("``")
 	key(left)
-inside (angles):
+inside (angles) | angle pair:
 	insert("<>")
 	key(left)
+# should simplify these down to a single word pattern for each
 angle that:
     text = edit.selected_text()
     user.paste("<{text}>")
 (square | square bracket) that:
     text = edit.selected_text()
     user.paste("[{text}]")
-(bracket | brace) that:
+(bracket | brace | curl) that:
     text = edit.selected_text()
     user.paste("{{{text}}}")
-(parens | args) that:
+(parens | args | round) that:
     text = edit.selected_text()
     user.paste("({text})")
 percent that:

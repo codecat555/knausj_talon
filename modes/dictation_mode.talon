@@ -1,7 +1,8 @@
 mode: dictation
 -
-^press <user.modifiers>$: key(modifiers)
-^press <user.keys>$: key(keys)
+press <user.modifiers>: key(modifiers)
+#press <user.keys>: key("{keys}")
+press <user.keys>: key(keys)
 
 # Everything here should call `auto_insert()` (instead of `insert()`), to preserve the state to correctly auto-capitalize/auto-space.
 # (Talonscript string literals implicitly call `auto_insert`, so there's no need to wrap those)
@@ -67,7 +68,7 @@ formatted <user.format_text>:
     user.formatters_reformat_selection(formatters)
 
 # Corrections
-scratch that: user.clear_last_phrase()
+(scratch that|nope): user.clear_last_phrase()
 scratch selection: edit.delete()
 select that: user.select_last_phrase()
 spell that <user.letters>: auto_insert(letters)
