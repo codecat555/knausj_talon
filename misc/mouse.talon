@@ -89,8 +89,8 @@ gazerbeam: user.mouse_gaze_scroll()
 gazerbeam here:
     user.mouse_move_center_active_window()
     user.mouse_gaze_scroll()
-(wheel stop|gaze off|gaze out|gazeout): user.mouse_scroll_stop()
-(wheel stop|gaze off|gaze out|gazeout) here:
+(wheel stop|wheel out|gaze off|gaze out|gazeout): user.mouse_scroll_stop()
+(wheel stop|wheel out|gaze off|gaze out|gazeout) here:
     user.mouse_move_center_active_window()
     user.mouse_scroll_stop()
 wheel left: user.mouse_scroll_left()
