@@ -53,8 +53,9 @@ def show_screen_number(screen: ui.Screen, number: int):
     def on_draw(c):
         c.paint.typeface = "arial"
         # The min(width, height) is to not get gigantic size on portrait screens
-        c.paint.textsize = round(min(c.width, c.height) / 2)
+        c.paint.textsize = round(min(c.width, c.height) / 4)
         text = f"{number}"
+        text = f"{screen.name}"
         rect = c.paint.measure_text(text)[1]
         x = c.x + c.width / 2 - rect.x - rect.width / 2
         y = c.y + c.height / 2 + rect.height / 2
