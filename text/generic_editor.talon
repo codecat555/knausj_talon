@@ -16,10 +16,10 @@ go word right:
 (go right|push):
     edit.right()
 
-go up:
+(go up|jump|lift):
     edit.up()
 
-go down:
+(go down|drop):
     edit.down()
 
 go line start:
