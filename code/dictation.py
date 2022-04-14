@@ -70,7 +70,7 @@ def text(m) -> str:
 # see https://talonvoice.slack.com/archives/C7ERD5Q5T/p1641502405012400
 # "Sentence my brief application spell air bat cap is numb ten" => My app abc is 10
 #text_rule = "({self.vocabulary} | <user.abbreviation> | <user.spell> | <user.number_prefix> | {self.key_punctuation} | <phrase>)+"
-@mod.capture(rule="({user.vocabulary} | {user.punctuation} | {user.prose_snippets} | <phrase> | <user.prose_number> | <user.prose_modifier> | <user.abbreviation>)+")
+@mod.capture(rule="({user.vocabulary} | {user.punctuation} | {user.prose_snippets} | <phrase> | <user.prose_number> | <user.prose_modifier> | {user.abbreviation})+")
 def prose(m) -> str:
     """Mixed words and punctuation, auto-spaced & capitalized."""
     # Straighten curly quotes that were introduced to obtain proper spacing.
