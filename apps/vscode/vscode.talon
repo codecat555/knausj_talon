@@ -14,7 +14,7 @@ window close: user.vscode("workbench.action.closeWindow")
 please [<user.text>]:
     user.vscode("workbench.action.showCommands")
     insert(user.text or "")
-    
+
 # Sidebar
 bar explore: user.vscode("workbench.view.explorer")
 bar extensions: user.vscode("workbench.view.extensions")
@@ -28,7 +28,7 @@ symbol hunt [<user.text>]:
     user.vscode("workbench.action.gotoSymbol")
     sleep(50ms)
     insert(text or "")
-    
+
 # Panels
 panel control: user.vscode("workbench.panel.repl.view.focus")
 panel output: user.vscode("workbench.panel.output.focus")
@@ -100,7 +100,7 @@ go recent [<user.text>]:
     sleep(50ms)
     insert(text or "")
     sleep(250ms)
-    
+
 # Bookmarks. Requires Bookmarks plugin
 go marks: user.vscode("workbench.view.extension.bookmarks")
 toggle mark: user.vscode("bookmarks.toggle")
@@ -128,7 +128,7 @@ git commit [<user.text>]:
     sleep(100ms)
     user.insert_formatted(text or "", "CAPITALIZE_FIRST_WORD")
 git commit undo: user.vscode("git.undoCommit")
-git commit ammend: user.vscode("git.commitStagedAmend")
+git commit amend: user.vscode("git.commitStagedAmend")
 git diff: user.vscode("git.openChange")
 git ignore: user.vscode("git.ignore")
 git merge: user.vscode("git.merge")
@@ -190,7 +190,7 @@ restore: user.vscode("workbench.action.evenEditorWidths")
 replace here:
     user.replace("")
     key(cmd-alt-l)
-    
+
 hover show: user.vscode("editor.action.showHover")
 
 join lines: user.vscode("editor.action.joinLines")

@@ -34,18 +34,18 @@ midi:
 	key("{modifiers}:up")
 	# close the mouse grid
 	user.grid_close()
-<user.modifiers> righty: 
+<user.modifiers> righty:
 	key("{modifiers}:down")
 	mouse_click(1)
 	key("{modifiers}:up")
 	# close the mouse grid
 	user.grid_close()
-(dubclick | duke): 
+(dubclick | duke):
 	mouse_click()
 	mouse_click()
 	# close the mouse grid
 	user.grid_close()
-(tripclick | triplick): 
+(tripclick | triplick):
 	mouse_click()
 	mouse_click()
 	mouse_click()
