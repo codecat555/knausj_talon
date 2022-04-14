@@ -30,12 +30,12 @@ slap: edit.line_insert_down()
 
 additional word:
     user.edit_additional_words()
-    
+
 additional replacement:
     user.edit_words_to_replace()
 
 additional brief:
     user.edit_abbreviations()
-    
+
 additional phone:
     user.edit_homophones()

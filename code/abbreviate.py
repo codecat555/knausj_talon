@@ -224,4 +224,4 @@ abbreviations = get_list_from_csv(
 )
 
 ctx = Context()
-ctx.lists["self.file_extension"] = abbreviations
+ctx.lists["user.abbreviation"] = abbreviations
