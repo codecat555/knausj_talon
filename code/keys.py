@@ -3,7 +3,7 @@ from typing import Set
 from talon import Module, Context, actions, app
 import sys
 
-default_alphabet = "air bat cap drum each fine gust harp sit jury crunch look made near odd pit quench red sun trap urge vest whale plex yip zip".split(
+default_alphabet = "air bat cap drum each fine gust harp sit jury crunch look made near odd pit quench red sun trap urge vest whale plex yank zip".split(
     " "
 )
 letters_string = "abcdefghijklmnopqrstuvwxyz"
@@ -135,11 +135,9 @@ punctuation_words = {
     "back tick": "`",
     "grave": "`",
     "comma": ",",
-    "pause": ",",
     "period": ".",
     "full stop": ".",
     "semicolon": ";",
-    "half pause": ";",
     "colon": ":",
     "forward slash": "/",
     "question mark": "?",
@@ -164,12 +162,9 @@ symbol_key_words = {
     "apostrophe": "'",
     "L square": "[",
     "left square": "[",
-    "lack": "[",
     "square": "[",
     "R square": "]",
-    "rack": "]",
     "right square": "]",
-    "close square": "]",
     "slash": "/",
     "backslash": "\\",
     "minus": "-",
@@ -182,26 +177,18 @@ symbol_key_words = {
     "under score": "_",
     "paren": "(",
     "L paren": "(",
-    "lip": "(",
     "left paren": "(",
     "R paren": ")",
-    "rip": ")",
     "right paren": ")",
-    "close paren": ")",
     "brace": "{",
     "left brace": "{",
-    "lace": "{",
     "R brace": "}",
-    "race": "}",
     "right brace": "}",
-    "close brace": "}",
     "angle": "<",
     "left angle": "<",
-    "lang": "<",
     "less than": "<",
     "rangle": ">",
     "R angle": ">",
-    "rang": ">",
     "right angle": ">",
     "greater than": ">",
     "star": "*",
@@ -210,7 +197,6 @@ symbol_key_words = {
     "caret": "^",
     "amper": "&",
     "pipe": "|",
-    "bar": "|",
     "dubquote": '"',
     "double quote": '"',
 
@@ -245,16 +231,10 @@ simple_keys = [
 
 alternate_keys = {
     "delete": "backspace",
-    "backspace": "backspace",
-    "wipe": "backspace",
     "forward delete": "delete",
-    "gobble": "delete",
+    #'junk': 'backspace',
     "page up": "pageup",
     "page down": "pagedown",
-    "tabby": "tab",
-    "clap": "enter",
-    # gap conflicts with cap...so, let's replace cap
-    "gap": "space",
 }
 # mac apparently doesn't have the menu key.
 if app.platform in ("windows", "linux"):
