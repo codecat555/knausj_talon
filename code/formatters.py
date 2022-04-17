@@ -39,7 +39,6 @@ def format_phrase(m: Union[str, Phrase], formatters: str):
         words = actions.dictate.replace_words(actions.dictate.parse_words(m))
 
     result = last_phrase_formatted = format_phrase_without_adding_to_history(words, formatters)
-    # print(f'format_phrase(3): {m=}, {result=}')
     actions.user.add_phrase_to_history(result)
     # Arguably, we shouldn't be dealing with history here, but somewhere later
     # down the line. But we have a bunch of code that relies on doing it this
@@ -113,7 +112,6 @@ formatters_dict = {
     "SPACE_SURROUNDED_STRING": (SEP, surround(" ")),
     "DOT_SEPARATED": words_with_joiner("."),
     "DOT_SNAKE": (NOSEP, lambda i, word, _: "." + word if i == 0 else "_" + word),
-    #"SLASH_SEPARATED": (NOSEP, every_word(lambda w: "/" + w)),
     "SLASH_SEPARATED": words_with_joiner("/"),
     "CAPITALIZE_FIRST_WORD": (SEP, first_vs_rest(lambda w: w.capitalize())),
     "CAPITALIZE_ALL_WORDS": (
