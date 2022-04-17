@@ -364,23 +364,3 @@ class UserActions:
         actions.edit.find(text)
         actions.sleep("100ms")
         actions.key("esc")
-
-    # collapse_verb = None
-    # def sidebar_action(target: str):
-    #     global collapse_verb
-    #     if target == 'explore':
-    #         user.vscode("workbench.view.explorer")
-    #         collapse_verb = "files.action.collapseExplorerFolders"
-    #     elif target == 'extensions':
-    #         user.vscode("workbench.view.extensions")
-    #     elif target == 'outline':
-    #         user.vscode("outline.focus")
-    #     elif target == 'run':
-    #         user.vscode("workbench.view.debug")
-    #     elif target == 'search':
-    #         user.vscode("workbench.view.search")
-    #         collapse_verb = "search.action.collapseSearchResults"
-    #     elif target == 'source':
-    #         user.vscode("workbench.view.scm")
-    #     elif target == 'switch':
-    #         user.vscode("workbench.action.toggleSidebarVisibility")
