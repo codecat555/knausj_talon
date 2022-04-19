@@ -83,6 +83,8 @@ settings():
 
     imgui.dark_mode = 1
 
+    user.enable_personalization = 1
+
 # uncomment tag to enable mouse grid
 # tag(): user.mouse_grid_enabled
 
