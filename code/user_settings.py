@@ -58,3 +58,14 @@ def get_list_from_csv(
             mapping[spoken_form] = output
 
     return mapping
+
+def get_lines_from_csv(filename: str, escapechar='\\'):
+    """Retrieves contents of CSV file in settings dir"""
+    path = SETTINGS_DIR / filename
+    assert filename.endswith(".csv")
+
+    # read via resource to take advantage of talon's
+    # ability to reload this script for us when the resource changes
+    with resource.open(str(path), "r") as f:
+        for row in csv.reader(f, escapechar=escapechar):
+            yield row
