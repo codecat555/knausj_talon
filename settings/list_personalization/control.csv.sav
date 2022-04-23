@@ -1,0 +1,11 @@
+DELETE,user.punctuation,punctuation_deletions.csv
+ADD,user.punctuation,punctuation_additions.csv
+REPLACE,user.letter
+REPLACE,user.letter,alphabet.csv
+ADD,user.symbol_key,punctuation_additions.csv
+ADD,user.symbol_key,symbol_key_additions.csv
+ADD,user.special_key,special_key_additions.csv
+DELETE,user.special_key,nosuchfile.csv
+ADD,user.special_key,nosuchfile.csv
+TEST,user.special_key,special_key_additions.csv
+TEST,user.nonesuch,special_key_additions.csv
