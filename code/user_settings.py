@@ -58,36 +58,3 @@ def get_list_from_csv(
             mapping[spoken_form] = output
 
     return mapping
-
-def get_lines_from_csv(filename: str, escapechar='\\'):
-    """Retrieves contents of CSV file in settings dir"""
-    path = SETTINGS_DIR / filename
-    assert filename.endswith(".csv")
-
-    # read via resource to take advantage of talon's
-    # ability to reload this script for us when the resource changes
-    rows = []
-    with resource.open(str(path), "r") as f:
-        # this is an option that I abandoned when I hit https://github.com/talonvoice/talon/issues/451,
-        # seems best to keep things simpler for now.
-        # for row in csv.reader(f, escapechar=escapechar):
-        #     yield row
-        rows = list(csv.reader(f, escapechar=escapechar))
-
-    return rows
-
-# added this while debugging an issue that turned out to be https://github.com/talonvoice/talon/issues/451.
-def get_lines_from_csv_untracked(filename: str, escapechar='\\'):
-    """Retrieves contents of CSV file in settings dir, without tracking"""
-    path = SETTINGS_DIR / filename
-    assert filename.endswith(".csv")
-
-    # read via resource to take advantage of talon's
-    # ability to reload this script for us when the resource changes
-    rows = []
-    with open(str(path), "r") as f:
-        rows = list(csv.reader(f, escapechar=escapechar))
-
-    print(f'returning {rows}')
-    return rows
-
