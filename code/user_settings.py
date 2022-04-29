@@ -77,16 +77,17 @@ def get_lines_from_csv(filename: str, escapechar='\\'):
     return rows
 
 # added this while debugging an issue that turned out to be https://github.com/talonvoice/talon/issues/451.
-# def get_lines_from_csv_untracked(filename: str, escapechar='\\'):
-#     """Retrieves contents of CSV file in settings dir, without tracking"""
-#     path = SETTINGS_DIR / filename
-#     assert filename.endswith(".csv")
+def get_lines_from_csv_untracked(filename: str, escapechar='\\'):
+    """Retrieves contents of CSV file in settings dir, without tracking"""
+    path = SETTINGS_DIR / filename
+    assert filename.endswith(".csv")
 
-#     # read via resource to take advantage of talon's
-#     # ability to reload this script for us when the resource changes
-#     rows = []
-#     with open(str(path), "r") as f:
-#         rows = list(csv.reader(f, escapechar=escapechar))
+    # read via resource to take advantage of talon's
+    # ability to reload this script for us when the resource changes
+    rows = []
+    with open(str(path), "r") as f:
+        rows = list(csv.reader(f, escapechar=escapechar))
 
-#     return rows
+    print(f'returning {rows}')
+    return rows
 
