@@ -8,8 +8,8 @@ focus left: key(ctrl-alt-shift-left)
 focus right: key(ctrl-alt-shift-right)
 focus up: key(ctrl-alt-shift-up)
 focus down: key(ctrl-alt-shift-down)
-split right: key(ctrl-shift-h)
-split down: key(ctrl-h)
+split right: key(alt-shift-=)
+split down: key(alt-shift--)
 term menu: key(ctrl-shift-f1)
 
 run last: key(up enter)
@@ -17,7 +17,7 @@ kill all:
     key(ctrl-c)
     insert("y")
     key(enter)
-    
+
 
 find it:
     edit.find()
@@ -27,4 +27,3 @@ find it <phrase>$:
     key(escape)
     # make it so
     edit.find("{phrase}\n")
-

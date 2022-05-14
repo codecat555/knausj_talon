@@ -1,6 +1,7 @@
 from collections import defaultdict
 import itertools
 import math
+import re
 from typing import Dict, List, Iterable, Set, Tuple, Union
 
 from talon import Module, Context, actions, imgui, Module, registry, ui, app
@@ -75,7 +76,7 @@ def gui_formatters(gui: imgui.GUI):
         gui.text("{}: {}".format(val, key))
 
     gui.spacer()
-    if gui.button("close"):
+    if gui.button("Help close"):
         gui_formatters.hide()
 
 
@@ -217,10 +218,10 @@ def gui_context_help(gui: imgui.GUI):
 
         if total_page_count > 1:
             gui.spacer()
-            if gui.button("Next..."):
+            if gui.button("Help next"):
                 actions.user.help_next()
 
-            if gui.button("Previous..."):
+            if gui.button("Help previous"):
                 actions.user.help_previous()
 
     # if there's a selected context, draw the commands for it
@@ -232,19 +233,19 @@ def gui_context_help(gui: imgui.GUI):
 
         gui.spacer()
         if total_page_count > 1:
-            if gui.button("Next..."):
+            if gui.button("Help next"):
                 actions.user.help_next()
 
-            if gui.button("Previous..."):
+            if gui.button("Help previous"):
                 actions.user.help_previous()
 
-        if gui.button("Return"):
+        if gui.button("Help return"):
             actions.user.help_return()
 
-    if gui.button("Refresh"):
+    if gui.button("Help refresh"):
         actions.user.help_refresh()
 
-    if gui.button("Close"):
+    if gui.button("Help close"):
         actions.user.help_hide()
 
 
@@ -438,7 +439,7 @@ def refresh_rule_word_map(context_command_map):
 
     for context_name, commands in context_command_map.items():
         for rule in commands:
-            tokens = set(token for token in rule.split(" ") if token.isalpha())
+            tokens = set(token for token in re.split(r'\W+', rule) if token.isalpha())
             for token in tokens:
                 rule_word_map[token].add((context_name, rule))
 
@@ -460,7 +461,7 @@ def register_events(register: bool):
         registry.unregister("update_commands", commands_updated)
 
 def hide_all_help_guis():
-    gui_context_help.hide()    
+    gui_context_help.hide()
     gui_formatters.hide()
     gui_list_help.hide()
 
@@ -477,7 +478,7 @@ def draw_list_commands(gui: imgui.GUI):
 
     talon_list = registry.lists[selected_list][0]
     #numpages = math.ceil(len(talon_list) / SIZE)
-    
+
     pages_list = []
 
     for item in paginate_list(talon_list):
@@ -485,7 +486,7 @@ def draw_list_commands(gui: imgui.GUI):
     #print(pages_list)
 
     total_page_count = len(pages_list)
-    return pages_list  
+    return pages_list
 
 @imgui.open(y=0)
 def gui_list_help(gui: imgui.GUI):
@@ -500,26 +501,26 @@ def gui_list_help(gui: imgui.GUI):
     gui.text("{} {}/{}".format(selected_list, current_list_page, total_page_count))
 
     gui.line()
-    
+
     for key, value in pages_list[current_list_page - 1].items():
         gui.text("{}: {}".format(value, key))
 
     gui.spacer()
-    
+
     if total_page_count > 1:
-        if gui.button("Next..."):
+        if gui.button("Help next"):
             actions.user.help_next()
 
-        if gui.button("Previous..."):
+        if gui.button("Help previous"):
             actions.user.help_previous()
 
-        if gui.button("Return"):
+        if gui.button("Help return"):
             actions.user.help_return()
 
-    if gui.button("Refresh"):
+    if gui.button("Help refresh"):
         actions.user.help_refresh()
 
-    if gui.button("Close"):
+    if gui.button("Help close"):
         actions.user.help_hide()
 
 
@@ -655,7 +656,7 @@ class Actions:
         global current_context_page
         global selected_context
         global selected_context_page
-        global total_page_count 
+        global total_page_count
 
         global current_list_page
 

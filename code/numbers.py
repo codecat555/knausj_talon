@@ -112,7 +112,7 @@ def split_list(value, l: list) -> Iterator:
         start = i+1
     yield l[start:]
 
-
+
 # # ---------- TESTS (uncomment to run) ----------
 # def test_number(expected, string):
 #     print('testing:', string)
@@ -148,13 +148,17 @@ def split_list(value, l: list) -> Iterator:
 # #test_number(100001010, "one million ten ten")
 # #test_number(1050006000, "one hundred thousand and five thousand and six thousand")
 
-
+
 # ---------- CAPTURES ----------
 alt_digits = "(" + ("|".join(digits_map.keys())) + ")"
 alt_teens = "(" + ("|".join(teens_map.keys())) + ")"
 alt_tens = "(" + ("|".join(tens_map.keys())) + ")"
 alt_scales = "(" + ("|".join(scales_map.keys())) + ")"
 number_word = "(" + "|".join(numbers_map.keys()) + ")"
+# don't allow numbers to start with scale words like "hundred", "thousand", etc
+leading_words = numbers_map.keys() - scales_map.keys()
+leading_words -= {'oh', 'o'} # comment out to enable bare/initial "oh"
+number_word_leading = f"({'|'.join(leading_words)})"
 
 # TODO: allow things like "double eight" for 88
 @ctx.capture("digit_string", rule=f"({alt_digits} | {alt_teens} | {alt_tens})+")
@@ -165,7 +169,7 @@ def digits(m) -> int:
     """Parses a phrase representing a digit sequence, returning it as an integer."""
     return int(m.digit_string)
 
-@mod.capture(rule=f"{number_word}+ (and {number_word}+)*")
+@mod.capture(rule=f"{number_word_leading} ([and] {number_word})*")
 def number_string(m) -> str:
     """Parses a number phrase, returning that number as a string."""
     return parse_number(list(m))
