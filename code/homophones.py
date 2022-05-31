@@ -1,7 +1,6 @@
-from .user_settings import SETTINGS_DIR
-
-from talon import Context, Module, app, clip, cron, imgui, actions, ui, fs
 import os
+
+from talon import Context, Module, actions, app, clip, fs, imgui, ui
 
 ########################################################################
 # global settings
@@ -13,7 +12,6 @@ import os
 # https://github.com/pimentel/homophones
 cwd = os.path.dirname(os.path.realpath(__file__))
 homophones_file = os.path.join(cwd, "homophones.csv")
-user_homophones_file = os.path.join(SETTINGS_DIR, "homophones.csv")
 # if quick_replace, then when a word is selected and only one homophone exists,
 # replace it without bringing up the options
 quick_replace = True
@@ -34,25 +32,17 @@ def update_homophones(name, flags):
 
     phones = {}
     canonical_list = []
-    for path in [homophones_file, user_homophones_file]:
-        with open(path, "r") as f:
-            for line in f:
-                words = line.rstrip().split(",")
-                canonical_list.append(words[0])
-                for word in words:
-                    word = word.lower()
-                    old_words = phones.get(word, [])
-                    phones[word] = sorted(set(old_words + words))
-
-    if os.path.exists(user_homophones_file):
-        with open(user_homophones_file, "r") as f:
-            for line in f:
-                words = line.rstrip().split(",")
-                canonical_list.append(words[0])
-                for word in words:
-                    word = word.lower()
-                    old_words = phones.get(word, [])
-                    phones[word] = sorted(set(old_words + words))
+    with open(homophones_file) as f:
+        for line in f:
+            words = line.rstrip().split(",")
+            canonical_list.append(words[0])
+            merged_words = set(words)
+            for word in words:
+                old_words = phones.get(word.lower(), [])
+                merged_words.update(old_words)
+            merged_words = sorted(merged_words)
+            for word in merged_words:
+                phones[word.lower()] = merged_words
 
     global all_homophones
     all_homophones = phones
@@ -61,8 +51,6 @@ def update_homophones(name, flags):
 
 update_homophones(homophones_file, None)
 fs.watch(cwd, update_homophones)
-if os.path.exists(user_homophones_file):
-    fs.watch(user_homophones_file, update_homophones)
 active_word_list = None
 is_selection = False
 
@@ -79,8 +67,8 @@ PHONES_FORMATTERS = [
 
 
 def find_matching_format_function(word_with_formatting, format_functions):
-    """ Finds the formatter function from a list of formatter functions which transforms a word into itself.
-     Returns an identity function if none exists """
+    """Finds the formatter function from a list of formatter functions which transforms a word into itself.
+    Returns an identity function if none exists"""
     for formatter in format_functions:
         formatted_word = formatter(word_with_formatting)
         if word_with_formatting == formatted_word:
@@ -102,7 +90,9 @@ def raise_homophones(word_to_find_homophones_for, forced=False, selection=False)
     if is_selection:
         word_to_find_homophones_for = word_to_find_homophones_for.strip()
 
-    formatter = find_matching_format_function(word_to_find_homophones_for, PHONES_FORMATTERS)
+    formatter = find_matching_format_function(
+        word_to_find_homophones_for, PHONES_FORMATTERS
+    )
 
     word_to_find_homophones_for = word_to_find_homophones_for.lower()
 
@@ -110,26 +100,34 @@ def raise_homophones(word_to_find_homophones_for, forced=False, selection=False)
     # and attempt to find the singular, then present the presumed plurals back. This could be improved!
     if word_to_find_homophones_for in all_homophones:
         valid_homophones = all_homophones[word_to_find_homophones_for]
-    elif word_to_find_homophones_for[-1] == 's' and word_to_find_homophones_for[:-1] in all_homophones:
-        valid_homophones = map(lambda w : w + 's', all_homophones[word_to_find_homophones_for[:-1]])
+    elif (
+        word_to_find_homophones_for[-1] == "s"
+        and word_to_find_homophones_for[:-1] in all_homophones
+    ):
+        valid_homophones = map(
+            lambda w: w + "s", all_homophones[word_to_find_homophones_for[:-1]]
+        )
     else:
-        app.notify("homophones.py", '"%s" not in homophones list' % word_to_find_homophones_for)
+        app.notify(
+            "homophones.py", f'"{word_to_find_homophones_for}" not in homophones list'
+        )
         return
 
     # Move current word to end of list to reduce searcher's cognitive load
-    valid_homophones_reordered = (
-        list(
-            filter(
-                lambda word_from_list: word_from_list.lower() != word_to_find_homophones_for, valid_homophones)
-        ) + [word_to_find_homophones_for]
-    )
+    valid_homophones_reordered = list(
+        filter(
+            lambda word_from_list: word_from_list.lower()
+            != word_to_find_homophones_for,
+            valid_homophones,
+        )
+    ) + [word_to_find_homophones_for]
     active_word_list = list(map(formatter, valid_homophones_reordered))
 
     if (
-            is_selection
-            and len(active_word_list) == 2
-            and quick_replace
-            and not force_raise
+        is_selection
+        and len(active_word_list) == 2
+        and quick_replace
+        and not force_raise
     ):
         if word_to_find_homophones_for == active_word_list[0].lower():
             new = active_word_list[1]
@@ -156,7 +154,7 @@ def gui(gui: imgui.GUI):
         gui.line()
         index = 1
         for word in active_word_list:
-            if gui.button("Choose {}: {}".format(index, word)):
+            if gui.button(f"Choose {index}: {word}"):
                 actions.insert(actions.user.homophones_select(index))
                 actions.user.homophones_hide()
             index = index + 1
