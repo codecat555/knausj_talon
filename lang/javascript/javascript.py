@@ -44,6 +44,32 @@ ctx.lists["user.code_common_member_function"] = {
     "then": "then",
 }
 
+ctx.lists["user.code_keyword"] = {
+    "a sink": "async ",
+    "await": "await ",
+    "break": "break",
+    "class": "class ",
+    "const": "const ",
+    "continue": "continue",
+    "default": "default ",
+    "export": "export ",
+    "false": "false",
+    "function": "function ",
+    "import": "import ",
+    "let": "let ",
+    "new": "new ",
+    "null": "null",
+    "private": "private ",
+    "protected": "protected ",
+    "public": "public ",
+    "return": "return ",
+    "throw": "throw ",
+    "true": "true",
+    "try": "try ",
+    "undefined": "undefined",
+    "yield": "yield ",
+}
+
 
 @ctx.action_class("user")
 class UserActions:
@@ -221,6 +247,16 @@ class UserActions:
         text += f"({selection or ''})"
         actions.user.paste(text)
         actions.edit.left()
+
+    def code_default_function(text: str):
+        """Inserts function declaration without modifiers"""
+        result = "function {}".format(
+            actions.user.formatted_text(
+                text, settings.get("user.code_private_function_formatter")
+            )
+        )
+
+        actions.user.code_insert_function(result, None)
 
     def code_private_function(text: str):
         """Inserts private function declaration"""
