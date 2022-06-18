@@ -7,7 +7,9 @@ from talon import Context, Module
 mod = Module()
 mod.list("abbreviation", desc="Common abbreviation")
 
-_abbreviation_defaults = {
+# TODO: Make this a csv file. Not necessarily a settings/ csv file, it might be
+# better to be like homophones.csv.
+abbreviations = {
     "address": "addr",
     "administrator": "admin",
     "administrators": "admins",
@@ -216,12 +218,6 @@ _abbreviation_defaults = {
     "what the fuck": "wtf",
     "window": "win",
 }
-
-abbreviations = get_list_from_csv(
-    "abbreviate.csv",
-    headers=("Abbreviation", "Word(s)"),
-    default=_abbreviation_defaults
-)
 
 ctx = Context()
 ctx.lists["user.abbreviation"] = abbreviations
