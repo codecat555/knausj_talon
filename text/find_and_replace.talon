@@ -1,13 +1,21 @@
 tag: user.find_and_replace
 -
 (hunt|seek|chase) this: user.find("")
+(hunt|seek|chase) this (pace | paste):
+  user.find("")
+  sleep(25ms)
+  edit.paste()
 (hunt|seek|chase) this <user.text>: user.find(text)
 (hunt|seek|chase) all: user.find_everywhere("")
+(hunt|seek|chase) all (pace | paste):
+  user.find_everywhere("")
+  sleep(25ms)
+  edit.paste()
 (hunt|seek|chase) all <user.text>: user.find_everywhere(text)
 (hunt|seek|chase) case : user.find_toggle_match_by_case()
 (hunt|seek|chase) word : user.find_toggle_match_by_word()
 (hunt|seek|chase) expression : user.find_toggle_match_by_regex()
-(hunt|seek) next: user.find_next()
+(hunt|seek|chase) next: user.find_next()
 (hunt|seek|chase) previous: user.find_previous()
 replace this [<user.text>]: user.replace(text or "")
 replace all: user.replace_everywhere("")
