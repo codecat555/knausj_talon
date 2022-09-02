@@ -4,6 +4,9 @@ from talon import Module, actions, app, clip, cron, ctrl, imgui, noise, ui, Cont
 from talon_plugins import eye_mouse, eye_zoom_mouse
 from talon_plugins.eye_mouse import config, toggle_camera_overlay, toggle_control
 
+# 1 or -1, to indicate scroll_direction of scrolling
+scroll_direction = -1
+
 key = actions.key
 self = actions.self
 scroll_amount = 0
@@ -225,13 +228,13 @@ class Actions:
 
     def mouse_scroll_up(amount: float = 1):
         """Scrolls up"""
-        mouse_scroll(-amount * setting_mouse_wheel_down_amount.get())()
+        mouse_scroll(scroll_direction * amount * setting_mouse_wheel_down_amount.get())()
 
     def mouse_scroll_up_continuous():
         """Scrolls up continuously"""
         global continuous_scoll_mode
         continuous_scoll_mode = "scroll up continuous"
-        mouse_scroll(-setting_mouse_continuous_scroll_amount.get())()
+        mouse_scroll(scroll_direction * setting_mouse_continuous_scroll_amount.get())()
 
         if scroll_job is None:
             start_scroll()
@@ -240,7 +243,7 @@ class Actions:
 
     def mouse_scroll_left(amount: float = 1):
         """Scrolls left"""
-        actions.mouse_scroll(0, -amount * setting_mouse_wheel_horizontal_amount.get())
+        actions.mouse_scroll(0, scroll_direction * amount * setting_mouse_wheel_horizontal_amount.get())
 
     def mouse_scroll_right(amount: float = 1):
         """Scrolls right"""
@@ -425,7 +428,7 @@ def gaze_scroll():
         midpoint = rect.y + rect.height / 2
         amount = int(((y - midpoint) / (rect.height / 10)) ** 3)
         #print('HERE 2')
-        actions.mouse_scroll(by_lines=False, y=amount)
+        actions.mouse_scroll(by_lines=False, y = -scroll_direction * amount)
 
     # print(f"gaze_scroll: {midpoint} {rect.height} {amount}")
 
@@ -480,3 +483,6 @@ if app.platform == "mac":
                 e.modify()
 
     tap.register(tap.MMOVE | tap.HOOK, on_move)
+
+    scroll_direction = 1
+
