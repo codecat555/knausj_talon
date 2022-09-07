@@ -212,13 +212,13 @@ class Actions:
 
     def mouse_scroll_down(amount: float = 1):
         """Scrolls down"""
-        mouse_scroll(amount * setting_mouse_wheel_down_amount.get())()
+        mouse_scroll(-scroll_direction * amount * setting_mouse_wheel_down_amount.get())()
 
     def mouse_scroll_down_continuous():
         """Scrolls down continuously"""
         global continuous_scoll_mode
         continuous_scoll_mode = "scroll down continuous"
-        mouse_scroll(setting_mouse_continuous_scroll_amount.get())()
+        mouse_scroll(-scroll_direction * setting_mouse_continuous_scroll_amount.get())()
 
         if scroll_job is None:
             start_scroll()
