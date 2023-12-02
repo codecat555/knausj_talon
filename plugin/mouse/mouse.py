@@ -53,6 +53,12 @@ setting_mouse_enable_pop_click = mod.setting(
     default=0,
     desc="Pop noise clicks left mouse button. 0 = off, 1 = on with eyetracker but not with zoom mouse mode, 2 = on but not with zoom mouse mode",
 )
+setting_mouse_enable_unconditional_pop_click = mod.setting(
+    "mouse_enable_unconditional_pop_click",
+    type=int,
+    default=0,
+    desc="Enable pop click even if 'control mouse' mode is not enabled and even if there is no eye tracker present.",
+)
 setting_mouse_enable_pop_stops_scroll = mod.setting(
     "mouse_enable_pop_stops_scroll",
     type=int,
@@ -264,6 +270,17 @@ def show_cursor_helper(show):
             print(f"Unable to show_cursor({str(show)})")
     else:
         ctrl.cursor_visible(show)
+
+# def on_pop(active):
+#     if setting_mouse_enable_pop_stops_scroll.get() >= 1 and (gaze_job or scroll_job):
+#         stop_scroll()
+#     elif (
+#         setting_mouse_enable_unconditional_pop_click.get() >= 1 or
+#         (not eye_zoom_mouse.zoom_mouse.enabled
+#         and eye_mouse.mouse.attached_tracker is not None
+#         and setting_mouse_enable_pop_click.get() >= 1)
+#     ):
+#         ctrl.mouse_click(button=0, hold=16000)
 
 
 @ctx.action_class("user")
