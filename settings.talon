@@ -1,4 +1,3 @@
--
 settings():
     # Adjust the scale of the imgui to my liking
     imgui.scale = 1.3
@@ -21,8 +20,21 @@ settings():
 #    # Suspend continuous scroll when suspend_scroll tag is active
 #    user.mouse_enable_suspended_scroll = 0
 
-    # Enable pop click with 'control mouse' mode
+#    # Suspend continuous scroll when suspend_scroll tag is active
+#    user.mouse_enable_suspended_scroll = 0
+
+    # Enable pop click with 'control mouse' mode.
+    # 0 = off
+    # 1 = on with eyetracker but not zoom mouse mode
+    # 2 = on but not with zoom mouse mode
     user.mouse_enable_pop_click = 1
+
+    # Enable if you like to use the hissing noise to do mouse scroll
+    user.mouse_enable_hiss_scroll = 0
+
+    # Enable pop click even if 'control mouse' mode is not enabled
+    # and even if there is no eye tracker present.
+    user.mouse_enable_unconditional_pop_click = 0
 
     # When enabled, the 'Scroll Mouse' GUI will not be shown.
     user.mouse_hide_mouse_gui = 0
@@ -46,6 +58,14 @@ settings():
     # "command history more" to display all of them, "command history less" to restore
     user.command_history_size = 50
 
+    # Uncomment the below line to add a directory (relative to the Talon user dir) with additional .snippet files
+    # Changing this setting requires a restart of Talon
+    # user.snippets_dir = "snippets"
+
+    # Uncomment the below to insert text longer than 10 characters (customizable) by
+    # pasting from the clipboard. This is often faster than typing.
+    #user.paste_to_insert_threshold = 10
+
     # Uncomment the below to enable context-sensitive dictation. This determines
     # how to format (capitalize, space) dictation-mode speech by selecting &
     # copying surrounding text before inserting. This can be slow and may not
@@ -57,6 +77,12 @@ settings():
 
 # uncomment tag to enable mouse grid
 # tag(): user.mouse_grid_enabled
+
+    # How to resize windows moved across physical screens (eg. via `snap next`).
+    # Default is 'proportional', which preserves window size : screen size ratio.
+    # 'size aware' keeps absolute window size the same, except full-height or
+    # -width windows are resized to stay full-height/width.
+    #user.window_snap_screen = "size aware"
 
 # Uncomment this to enable the curse yes/curse no commands (show hide mouse cursor). See issue #688.
 tag(): user.mouse_cursor_commands_enable

@@ -4,7 +4,6 @@ app: eclipse
 tag(): user.find_and_replace
 tag(): user.line_commands
 # tag(): user.multiple_cursors
-# tag(): user.snippets
 tag(): user.splits
 tag(): user.tabs
 # splits.py support end
@@ -73,8 +72,7 @@ file hunt [<user.text>]:
 # file create sibling:
 file create: key(ctrl-n)
 file open folder: key(alt-shift-w x)
-file rename:
-    key(alt-shift-w p enter f2)
+file rename: key(alt-shift-w p enter f2)
 file reveal: key(alt-shift-w p enter)
 
 # Language Features
